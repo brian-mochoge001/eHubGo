@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "843347273630",
+    "project_id": "ehub-infinnitydevelopers",
+    "storage_bucket": "ehub-infinnitydevelopers.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:843347273630:android:b6ea8ad2c2c56d6575988f",
+        "android_client_info": {
+          "package_name": "com.infinnitydevelopers.ehub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCySNHMHcKNdNV6z5RWW8kE1qRO42nqSu8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
