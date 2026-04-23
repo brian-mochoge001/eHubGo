@@ -95,6 +95,35 @@ func (h *BusinessHandler) GetMyMall(c *gin.Context) {
 	}
 }
 
+// ListBusinesses returns all businesses, optionally filtered by type
+func (h *BusinessHandler) ListBusinesses(c *gin.Context) {
+	businessType := c.Query("type")
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		var businesses []db.Business
+		var err error
+
+		if businessType != "" {
+			businesses, err = qtx.ListBusinessesByType(c.Request.Context(), businessType)
+		} else {
+			// If no type, we might want to list all approved ones
+			// For now, reuse ListBusinessesByType with empty or add a ListAllApproved
+			businesses, err = qtx.ListBusinessesByType(c.Request.Context(), businessType)
+		}
+
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, businesses)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
 // GetBusinessProfile returns details of a specific business
 func (h *BusinessHandler) GetBusinessProfile(c *gin.Context) {
 	id := c.Param("id")

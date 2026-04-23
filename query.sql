@@ -221,6 +221,12 @@ RETURNING *;
 -- name: ListFoodItemsByBusiness :many
 SELECT * FROM food_items WHERE business_id = $1;
 
+-- name: ListAllFoodItems :many
+SELECT f.*, b.name as restaurant_name 
+FROM food_items f
+JOIN businesses b ON f.business_id = b.id
+ORDER BY f.created_at DESC;
+
 -- Drivers & Taxi
 -- name: CreateDriver :one
 INSERT INTO drivers (id, user_id, name, status, vehicle_type_id)
@@ -347,3 +353,133 @@ RETURNING *;
 
 -- name: GetReviewsByTarget :many
 SELECT * FROM reviews WHERE target_id = $1 AND target_type = $2 ORDER BY created_at DESC;
+
+-- Grocery Items
+-- name: CreateGroceryItem :one
+INSERT INTO grocery_items (id, business_id, name, description, price, currency, image_url, unit, stock_quantity, category)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING *;
+
+-- name: ListGroceryItems :many
+SELECT * FROM grocery_items WHERE is_available = TRUE ORDER BY created_at DESC;
+
+-- name: ListGroceryItemsByBusiness :many
+SELECT * FROM grocery_items WHERE business_id = $1 ORDER BY created_at DESC;
+
+-- Liquor Items
+-- name: CreateLiquorItem :one
+INSERT INTO liquor_items (id, business_id, name, description, price, currency, image_url, volume, abv, stock_quantity, category)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *;
+
+-- name: ListLiquorItems :many
+SELECT * FROM liquor_items WHERE is_available = TRUE ORDER BY created_at DESC;
+
+-- name: ListLiquorItemsByBusiness :many
+SELECT * FROM liquor_items WHERE business_id = $1 ORDER BY created_at DESC;
+
+-- Pharmacy Items
+-- name: CreatePharmacyItem :one
+INSERT INTO pharmacy_items (id, business_id, name, description, price, currency, image_url, requires_prescription, stock_quantity, category)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING *;
+
+-- name: ListPharmacyItems :many
+SELECT * FROM pharmacy_items WHERE is_available = TRUE ORDER BY created_at DESC;
+
+-- name: ListPharmacyItemsByBusiness :many
+SELECT * FROM pharmacy_items WHERE business_id = $1 ORDER BY created_at DESC;
+
+-- Bus Routes
+-- name: CreateBusRoute :one
+INSERT INTO bus_routes (id, business_id, origin, destination, departure_time, arrival_time, price, currency, available_seats, bus_type)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING *;
+
+-- name: ListBusRoutes :many
+SELECT * FROM bus_routes WHERE departure_time > CURRENT_TIMESTAMP ORDER BY departure_time ASC;
+
+-- Movies
+-- name: CreateMovie :one
+INSERT INTO movies (id, title, description, genre, rating, duration_minutes, poster_url, is_now_playing, release_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING *;
+
+-- name: ListNowPlayingMovies :many
+SELECT * FROM movies WHERE is_now_playing = TRUE ORDER BY rating DESC;
+
+-- name: ListComingSoonMovies :many
+SELECT * FROM movies WHERE is_now_playing = FALSE AND release_date > CURRENT_DATE ORDER BY release_date ASC;
+
+-- Movie Showtimes
+-- name: CreateMovieShowtime :one
+INSERT INTO movie_showtimes (id, movie_id, business_id, show_time, price, currency, room_number, available_seats)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: ListMovieShowtimesByMovie :many
+SELECT * FROM movie_showtimes WHERE movie_id = $1 AND show_time > CURRENT_TIMESTAMP ORDER BY show_time ASC;
+
+-- Flights
+-- name: CreateFlight :one
+INSERT INTO flights (id, airline_name, flight_number, origin, destination, departure_time, arrival_time, price, currency, class_type, available_seats)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *;
+
+-- name: ListFlights :many
+SELECT * FROM flights WHERE departure_time > CURRENT_TIMESTAMP ORDER BY departure_time ASC;
+
+-- Jobs
+-- name: CreateJob :one
+INSERT INTO jobs (id, business_id, title, description, category, job_type, location, salary_range, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING *;
+
+-- name: ListActiveJobs :many
+SELECT * FROM jobs WHERE is_active = TRUE AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP) ORDER BY created_at DESC;
+
+-- Bills
+-- name: CreateBill :one
+INSERT INTO bills (id, user_id, biller_name, account_number, amount_due, currency, due_date, category)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING *;
+
+-- name: ListUserBills :many
+SELECT * FROM bills WHERE user_id = $1 ORDER BY due_date ASC;
+
+-- Wallet
+-- name: GetWalletBalance :one
+SELECT * FROM user_wallet WHERE user_id = $1;
+
+-- name: UpdateWalletBalance :one
+UPDATE user_wallet SET balance = $2, last_updated = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING *;
+
+-- Messages
+-- name: CreateMessage :one
+INSERT INTO messages (id, sender_id, receiver_id, content)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: ListUserMessages :many
+SELECT * FROM messages WHERE sender_id = $1 OR receiver_id = $1 ORDER BY created_at DESC;
+
+-- Notifications
+-- name: CreateNotification :one
+INSERT INTO notifications (id, user_id, title, body, type)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: ListUserNotifications :many
+SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC;
+
+-- name: MarkNotificationAsRead :exec
+UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2;
+
+-- Tours
+-- name: CreateTour :one
+INSERT INTO tours (id, business_id, title, description, location, price, currency, image_url, duration)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING *;
+
+-- name: ListTours :many
+SELECT * FROM tours ORDER BY rating DESC;

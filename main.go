@@ -134,6 +134,9 @@ func main() {
 	propertyHandler := handlers.NewPropertyHandler(queries, conn)
 	c2cHandler := handlers.NewC2CHandler(queries, conn)
 	taxiHandler := handlers.NewTaxiHandler(queries, conn)
+	userHandler := handlers.NewUserHandler(queries, conn)
+	extraHandler := handlers.NewServicesExtraHandler(queries, conn)
+	specHandler := handlers.NewSpecializedHandler(queries, conn)
 
 	// Initialize Firebase Admin SDK
 	var opts []option.ClientOption
@@ -329,6 +332,27 @@ func main() {
 
 			// ... (skip vendor verification fix) ...
 
+			// User Endpoints
+			protected.GET("/wallet/balance", userHandler.GetWalletBalance)
+			protected.GET("/messages", userHandler.ListMessages)
+			protected.GET("/notifications", userHandler.ListNotifications)
+			protected.GET("/bills", userHandler.ListBills)
+
+			// Specialized Service Endpoints
+			protected.GET("/bus/routes", extraHandler.ListBusRoutes)
+			protected.GET("/cinema/movies/now-playing", extraHandler.ListNowPlayingMovies)
+			protected.GET("/cinema/movies/coming-soon", extraHandler.ListComingSoonMovies)
+			protected.GET("/cinema/movies/:id/showtimes", extraHandler.ListMovieShowtimes)
+			protected.GET("/flights", extraHandler.ListFlights)
+			protected.GET("/jobs", extraHandler.ListJobs)
+			protected.GET("/tours", extraHandler.ListTours)
+
+			// Specialized Item Endpoints
+			protected.GET("/groceries", specHandler.ListGroceryItems)
+			protected.GET("/liquor", specHandler.ListLiquorItems)
+			protected.GET("/pharmacy", specHandler.ListPharmacyItems)
+			protected.GET("/food-items/all", specHandler.ListAllFoodItems)
+
 			// Universal Cart Endpoints
 			protected.GET("/cart", cartHandler.GetCart)
 			protected.POST("/cart", cartHandler.AddToCart)
@@ -339,6 +363,7 @@ func main() {
 			protected.GET("/reviews", reviewHandler.GetReviewsByTarget)
 
 			// Business Endpoints (The "Mall/Stall" model)
+			protected.GET("/businesses", businessHandler.ListBusinesses)
 			protected.POST("/businesses", businessHandler.RegisterBusiness)
 			protected.GET("/businesses/me", businessHandler.GetMyMall)
 			protected.GET("/businesses/:id", businessHandler.GetBusinessProfile)
@@ -371,6 +396,11 @@ func main() {
 			// Ecommerce Endpoints
 			protected.GET("/featured-products", ecommerceHandler.ListFeaturedProducts)
 			protected.GET("/products", ecommerceHandler.ListProducts)
+			protected.GET("/products/:id", ecommerceHandler.GetProductByID)
+			protected.GET("/categories", ecommerceHandler.ListCategories)
+			protected.GET("/orders", ecommerceHandler.GetOrders)
+			protected.POST("/checkout", ecommerceHandler.Checkout)
+			protected.PUT("/cart/:id", ecommerceHandler.UpdateCartItemQuantity)
 
 			// Brands Routes
 			protected.POST("/brands", func(c *gin.Context) {
@@ -442,8 +472,8 @@ func main() {
 			})
 
 			// Product Variants Routes
-			protected.POST("/products/:product_id/variants", func(c *gin.Context) {
-				productID := c.Param("product_id")
+			protected.POST("/products/:id/variants", func(c *gin.Context) {
+				productID := c.Param("id")
 				var params db.CreateProductVariantParams
 				if err := c.ShouldBindJSON(&params); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -459,8 +489,8 @@ func main() {
 				c.JSON(http.StatusCreated, variant)
 			})
 
-			protected.GET("/products/:product_id/variants", func(c *gin.Context) {
-				productID := c.Param("product_id")
+			protected.GET("/products/:id/variants", func(c *gin.Context) {
+				productID := c.Param("id")
 				variants, err := queries.GetProductVariantsByProductID(c.Request.Context(), productID)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -515,8 +545,8 @@ func main() {
 			})
 
 			// Product Discounts Routes
-			protected.POST("/products/:product_id/discounts", func(c *gin.Context) {
-				productID := c.Param("product_id")
+			protected.POST("/products/:id/discounts", func(c *gin.Context) {
+				productID := c.Param("id")
 				var params db.CreateProductDiscountParams
 				if err := c.ShouldBindJSON(&params); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -532,8 +562,8 @@ func main() {
 				c.JSON(http.StatusCreated, discount)
 			})
 
-			protected.GET("/products/:product_id/discounts", func(c *gin.Context) {
-				productID := c.Param("product_id")
+			protected.GET("/products/:id/discounts", func(c *gin.Context) {
+				productID := c.Param("id")
 				discounts, err := queries.GetProductDiscountsByProductID(c.Request.Context(), productID)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

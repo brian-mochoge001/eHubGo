@@ -240,6 +240,181 @@ CREATE TABLE food_items (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Grocery Items (eGrocery - Linked to Business)
+CREATE TABLE grocery_items (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    price NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    image_url TEXT,
+    unit TEXT, -- 'kg', 'bundle', 'pcs', etc.
+    stock_quantity INTEGER NOT NULL DEFAULT 0,
+    category TEXT,
+    is_available BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Liquor Items (eLiquor - Linked to Business)
+CREATE TABLE liquor_items (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    price NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    image_url TEXT,
+    volume TEXT, -- '750ml', '1L', etc.
+    abv NUMERIC(4, 2), -- Alcohol by volume
+    stock_quantity INTEGER NOT NULL DEFAULT 0,
+    category TEXT,
+    is_available BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Pharmacy Items (eHealth - Linked to Business)
+CREATE TABLE pharmacy_items (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    price NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    image_url TEXT,
+    requires_prescription BOOLEAN DEFAULT FALSE,
+    stock_quantity INTEGER NOT NULL DEFAULT 0,
+    category TEXT,
+    is_available BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Bus Routes (eBus)
+CREATE TABLE bus_routes (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    origin TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    departure_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    arrival_time TIMESTAMP WITH TIME ZONE,
+    price NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    available_seats INTEGER NOT NULL DEFAULT 0,
+    bus_type TEXT, -- 'Executive', 'Economy', etc.
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Movies (eCinema)
+CREATE TABLE movies (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    description TEXT,
+    genre TEXT,
+    rating NUMERIC(2, 1),
+    duration_minutes INTEGER,
+    poster_url TEXT,
+    is_now_playing BOOLEAN DEFAULT FALSE,
+    release_date DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Movie Showtimes
+CREATE TABLE movie_showtimes (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    movie_id TEXT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    show_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    price NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    room_number TEXT,
+    available_seats INTEGER NOT NULL DEFAULT 0
+);
+
+-- Flights (eFlights)
+CREATE TABLE flights (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    airline_name TEXT NOT NULL,
+    flight_number TEXT NOT NULL,
+    origin TEXT NOT NULL,
+    destination TEXT NOT NULL,
+    departure_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    arrival_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    price NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    class_type TEXT, -- 'Economy', 'Business', 'First'
+    available_seats INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tours (eTravel)
+CREATE TABLE tours (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    price NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    rating NUMERIC(2, 1) DEFAULT 0.0,
+    image_url TEXT,
+    duration TEXT, -- '3 Days', '1 Week', etc.
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Jobs (eJobs)
+CREATE TABLE jobs (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    category TEXT,
+    job_type TEXT, -- 'Full-time', 'Contract', 'Part-time'
+    location TEXT,
+    salary_range TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE
+);
+
+-- Bills (eBills)
+CREATE TABLE bills (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    biller_name TEXT NOT NULL,
+    account_number TEXT NOT NULL,
+    amount_due NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    due_date DATE,
+    status TEXT DEFAULT 'unpaid', -- 'unpaid', 'paid', 'overdue'
+    category TEXT, -- 'Electricity', 'Water', etc.
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Messaging
+CREATE TABLE messages (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receiver_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Notifications
+CREATE TABLE notifications (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    type TEXT, -- 'order', 'promo', 'system'
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Services (Laundry, Repair, etc. - Linked to Business)
 CREATE TABLE services (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -428,6 +603,17 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE businesses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE food_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE grocery_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE liquor_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pharmacy_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bus_routes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE movies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE movie_showtimes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE flights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bills ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
@@ -441,6 +627,17 @@ ALTER TABLE users FORCE ROW LEVEL SECURITY;
 ALTER TABLE businesses FORCE ROW LEVEL SECURITY;
 ALTER TABLE products FORCE ROW LEVEL SECURITY;
 ALTER TABLE food_items FORCE ROW LEVEL SECURITY;
+ALTER TABLE grocery_items FORCE ROW LEVEL SECURITY;
+ALTER TABLE liquor_items FORCE ROW LEVEL SECURITY;
+ALTER TABLE pharmacy_items FORCE ROW LEVEL SECURITY;
+ALTER TABLE bus_routes FORCE ROW LEVEL SECURITY;
+ALTER TABLE movies FORCE ROW LEVEL SECURITY;
+ALTER TABLE movie_showtimes FORCE ROW LEVEL SECURITY;
+ALTER TABLE flights FORCE ROW LEVEL SECURITY;
+ALTER TABLE jobs FORCE ROW LEVEL SECURITY;
+ALTER TABLE bills FORCE ROW LEVEL SECURITY;
+ALTER TABLE messages FORCE ROW LEVEL SECURITY;
+ALTER TABLE notifications FORCE ROW LEVEL SECURITY;
 ALTER TABLE services FORCE ROW LEVEL SECURITY;
 ALTER TABLE properties FORCE ROW LEVEL SECURITY;
 ALTER TABLE orders FORCE ROW LEVEL SECURITY;
@@ -467,6 +664,21 @@ CREATE POLICY products_manage_policy ON products
         business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
     );
 
+CREATE POLICY grocery_manage_policy ON grocery_items
+    FOR ALL USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
+    );
+
+CREATE POLICY liquor_manage_policy ON liquor_items
+    FOR ALL USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
+    );
+
+CREATE POLICY pharmacy_manage_policy ON pharmacy_items
+    FOR ALL USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
+    );
+
 CREATE POLICY services_manage_policy ON services
     FOR ALL USING (
         business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
@@ -476,6 +688,14 @@ CREATE POLICY properties_manage_policy ON properties
     FOR ALL USING (
         business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
     );
+
+CREATE POLICY tours_manage_policy ON tours
+    FOR ALL USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
+    );
+
+CREATE POLICY tours_view_policy ON tours
+    FOR SELECT USING (true);
 
 -- 4. VENDOR DOCUMENTS Policy
 CREATE POLICY vendor_docs_access_policy ON vendor_documents
@@ -513,3 +733,23 @@ CREATE POLICY property_bookings_policy ON property_bookings
         property_id IN (SELECT id FROM properties WHERE business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id())) OR
         has_role('staff')
     );
+
+-- 8. Specialized Services Policy
+CREATE POLICY bus_routes_view_policy ON bus_routes FOR SELECT USING (true);
+CREATE POLICY bus_routes_manage_policy ON bus_routes FOR ALL USING (has_role('admin') OR has_role('staff'));
+
+CREATE POLICY movies_view_policy ON movies FOR SELECT USING (true);
+CREATE POLICY movie_showtimes_view_policy ON movie_showtimes FOR SELECT USING (true);
+
+CREATE POLICY flights_view_policy ON flights FOR SELECT USING (true);
+
+CREATE POLICY jobs_view_policy ON jobs FOR SELECT USING (is_active = true OR has_role('staff'));
+CREATE POLICY jobs_manage_policy ON jobs FOR ALL USING (
+    business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
+);
+
+CREATE POLICY bills_access_policy ON bills USING (user_id = get_app_user_id() OR has_role('staff'));
+
+CREATE POLICY messages_access_policy ON messages USING (sender_id = get_app_user_id() OR receiver_id = get_app_user_id());
+
+CREATE POLICY notifications_access_policy ON notifications USING (user_id = get_app_user_id());
