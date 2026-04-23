@@ -7,6 +7,7 @@ RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 WORKDIR /app
 
 # Copy modules first (best practice for caching)
+RUN sqlc generate
 COPY go.mod go.sum ./
 RUN go mod download
 
