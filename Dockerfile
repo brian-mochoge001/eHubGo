@@ -1,23 +1,24 @@
 FROM golang:1.26-alpine AS builder
 
-# Install necessary build tools and sqlc
+# Install build tools and sqlc
 RUN apk add --no-cache git curl
 RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
 WORKDIR /app
 
-# Copy go mod and sum files
+# Copy modules first (best practice for caching)
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
+# Copy all source files
 COPY . .
 
 # Generate database bindings
 RUN sqlc generate
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o main main.go
+# Build the main application
+# Note: We build from the current directory where main.go resides
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
 # Final stage
 FROM alpine:latest
