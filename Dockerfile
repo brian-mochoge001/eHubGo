@@ -3,11 +3,11 @@ FROM golang:1.26-alpine AS builder
 # Install build tools and sqlc
 RUN apk add --no-cache git curl
 RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+RUN sqlc generate
 
 WORKDIR /app
 
 # Copy modules first (best practice for caching)
-RUN sqlc generate
 COPY go.mod go.sum ./
 RUN go mod download
 

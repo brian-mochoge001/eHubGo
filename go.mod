@@ -1,4 +1,4 @@
-module ehub/backend
+module ehubgo
 
 go 1.26.1
 

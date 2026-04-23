@@ -3,4 +3,4 @@ db/
 bin/
 eHubGo
 service-account.json
-backend.exe
+ehubgo.exe

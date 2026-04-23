@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"ehub/backend/db"
+	"ehubgo/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )

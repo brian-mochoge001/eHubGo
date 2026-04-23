@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"ehub/backend/db"
-	"ehub/backend/handlers"
+	"ehubgo/db"
+	"ehubgo/handlers"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
