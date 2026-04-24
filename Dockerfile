@@ -19,14 +19,20 @@ RUN sqlc generate
 # Build the main application
 RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
+# Build the seed script
+RUN CGO_ENABLED=0 GOOS=linux go build -o seed ./cmd/seed/main.go
+
 # Final stage
 FROM alpine:latest
 WORKDIR /app
 RUN apk --no-cache add ca-certificates
 
-# Copy the binary from the builder
+# Copy the binaries from the builder
 COPY --from=builder /app/main .
+COPY --from=builder /app/seed .
 
 EXPOSE 8080
 
+# By default, run the main app. 
+# For seeding, use Render's "Pre-deploy command" or run ./seed manually
 CMD ["./main"]

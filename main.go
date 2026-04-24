@@ -140,7 +140,9 @@ func main() {
 
 	// Initialize Firebase Admin SDK
 	var opts []option.ClientOption
-	if serviceAccountPath := os.Getenv("FIREBASE_SERVICE_ACCOUNT_PATH"); serviceAccountPath != "" {
+	if serviceAccountJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT_JSON"); serviceAccountJSON != "" {
+		opts = append(opts, option.WithCredentialsJSON([]byte(serviceAccountJSON)))
+	} else if serviceAccountPath := os.Getenv("FIREBASE_SERVICE_ACCOUNT_PATH"); serviceAccountPath != "" {
 		opts = append(opts, option.WithCredentialsFile(serviceAccountPath))
 	}
 
