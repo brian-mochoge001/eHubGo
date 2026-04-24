@@ -35,4 +35,5 @@ EXPOSE 8080
 
 # By default, run the main app. 
 # For seeding, use Render's "Pre-deploy command" or run ./seed manually
+RUN go run main.go
 CMD ["./main"]
