@@ -33,8 +33,5 @@ COPY --from=builder /app/seed .
 
 EXPOSE 8080
 
-# By default, run the main app. 
-# For seeding, use Render's "Pre-deploy command" or run ./seed manually
-RUN CGO_ENABLED=0 GOOS=linux go run CMD/seed/main.go
-RUN CGO_ENABLED=0 GOOS=linux go run main.go
-CMD ["./main"]
+# Run seed and then start the application
+CMD ["/bin/sh", "-c", "./seed && ./main"]
