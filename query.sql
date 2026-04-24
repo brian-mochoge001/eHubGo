@@ -40,8 +40,8 @@ SELECT * FROM businesses WHERE miniservice_type = @miniservice_type AND verifica
 
 -- Products
 -- name: CreateProduct :one
-INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, is_flash_sale, discount_percentage)
-VALUES (@id, @business_id, @name, @description, @price, @currency, @stock_quantity, @category_id, @brand_id, @is_flash_sale, @discount_percentage)
+INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, is_flash_sale, discount_percentage, rating)
+VALUES (@id, @business_id, @name, @description, @price, @currency, @stock_quantity, @category_id, @brand_id, @is_flash_sale, @discount_percentage, @rating)
 RETURNING *;
 
 -- name: GetProductsByBusiness :many

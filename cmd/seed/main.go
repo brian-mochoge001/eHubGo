@@ -189,6 +189,39 @@ func main() {
 	}
 
 	// 8. Seed Specific Items
+	// Ecommerce Products
+	ecommerceBusinessID := ""
+	// Use grocery or restaurant as a fallback if no "ecommerce" type is defined yet
+	if id, ok := businessIDs["grocery"]; ok {
+		ecommerceBusinessID = id
+	}
+
+	if ecommerceBusinessID != "" {
+		products := []struct {
+			name        string
+			price       string
+			description string
+			image       string
+		}{
+			{"iPhone 15 Pro", "120000.00", "Titanium design, A17 Pro chip.", "https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=400"},
+			{"AirPods Pro (2nd Gen)", "35000.00", "Active Noise Cancellation.", "https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?w=400"},
+			{"Samsung Galaxy S24", "110000.00", "Galaxy AI is here.", "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400"},
+		}
+
+		for _, p := range products {
+			_, _ = queries.CreateProduct(ctx, db.CreateProductParams{
+				ID:            uuid.New().String(),
+				BusinessID:    ecommerceBusinessID,
+				Name:          p.name,
+				Price:         p.price,
+				Currency:      "Ksh",
+				Description:   sql.NullString{String: p.description, Valid: true},
+				StockQuantity: 10,
+				Rating:        sql.NullString{String: "4.5", Valid: true},
+			})
+		}
+	}
+
 	// Groceries
 	if id, ok := businessIDs["grocery"]; ok {
 		_, _ = queries.CreateGroceryItem(ctx, db.CreateGroceryItemParams{

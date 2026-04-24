@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"ehubgo/db"
 	"github.com/gin-gonic/gin"
@@ -24,13 +25,20 @@ func NewEcommerceHandler(queries *db.Queries, dbConn *sql.DB) *EcommerceHandler 
 
 // ListFeaturedProducts returns best-selling and verified products
 func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
-	limit := int32(10) // Default limit
+	limitStr := c.DefaultQuery("limit", "10")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil {
+		limit = 10
+	}
 	
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+	err = WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		products, err := qtx.GetFeaturedProducts(c.Request.Context(), limit)
+		products, err := qtx.GetFeaturedProducts(c.Request.Context(), int32(limit))
 		if err != nil {
 			return err
+		}
+		if products == nil {
+			products = []db.GetFeaturedProductsRow{}
 		}
 		c.JSON(http.StatusOK, products)
 		return nil
