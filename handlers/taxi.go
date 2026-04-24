@@ -39,9 +39,9 @@ func (h *TaxiHandler) UpdateLocation(c *gin.Context) {
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		driver, err := qtx.UpdateDriverLocation(c.Request.Context(), db.UpdateDriverLocationParams{
-			UserID:        userID, // Changed from ID to UserID to match schema
-			StMakepoint:   req.Longitude,
-			StMakepoint_2: req.Latitude,
+			UserID: userID,
+			Lng:    req.Longitude,
+			Lat:    req.Latitude,
 		})
 		if err != nil {
 			return err
@@ -104,10 +104,10 @@ func (h *TaxiHandler) GetNearbyDrivers(c *gin.Context) {
 		qtx := h.Queries.WithTx(tx)
 		// Check for correct query name and parameters
 		drivers, err := qtx.GetNearbyDrivers(c.Request.Context(), db.GetNearbyDriversParams{
-			StMakepoint:   params.Longitude,
-			StMakepoint_2: params.Latitude,
-			StDwithin:     params.Radius,
-			Limit:         params.Limit,
+			Lng:        params.Longitude,
+			Lat:        params.Latitude,
+			Radius:     params.Radius,
+			LimitCount: params.Limit,
 		})
 		if err != nil {
 			return err
@@ -142,14 +142,14 @@ func (h *TaxiHandler) RequestRide(c *gin.Context) {
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		trip, err := qtx.CreateTaxiTrip(c.Request.Context(), db.CreateTaxiTripParams{
-			ID:            uuid.New().String(),
-			UserID:        userID,
-			StMakepoint:   req.PickupLng,
-			StMakepoint_2: req.PickupLat,
-			StMakepoint_3: req.DropoffLng,
-			StMakepoint_4: req.DropoffLat,
-			TotalAmount:   fmt.Sprintf("%.2f", req.Amount),
-			Currency:      req.Currency,
+			ID:         uuid.New().String(),
+			UserID:     userID,
+			PickupLng:  req.PickupLng,
+			PickupLat:  req.PickupLat,
+			DropoffLng: req.DropoffLng,
+			DropoffLat: req.DropoffLat,
+			TotalAmount: fmt.Sprintf("%.2f", req.Amount),
+			Currency:   req.Currency,
 		})
 		if err != nil {
 			return err

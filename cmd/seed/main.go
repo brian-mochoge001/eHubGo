@@ -178,8 +178,8 @@ func main() {
 			businessIDs[bt.mtype] = biz.ID
 			// Set as approved
 			_, _ = queries.UpdateBusinessStatus(ctx, db.UpdateBusinessStatusParams{
-				ID:                 biz.ID,
-				VerificationStatus: db.NullBusinessVerificationStatus{BusinessVerificationStatus: db.BusinessVerificationStatusApproved, Valid: true},
+				ID:     biz.ID,
+				Status: db.NullBusinessVerificationStatus{BusinessVerificationStatus: db.BusinessVerificationStatusApproved, Valid: true},
 			})
 		}
 	}

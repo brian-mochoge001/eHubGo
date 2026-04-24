@@ -285,9 +285,9 @@ func main() {
 					return
 				}
 				driver, err := queries.UpdateDriverLocation(c.Request.Context(), db.UpdateDriverLocationParams{
-					UserID:        id,
-					StMakepoint:   loc.Longitude,
-					StMakepoint_2: loc.Latitude,
+					UserID: id,
+					Lng:    loc.Longitude,
+					Lat:    loc.Latitude,
 				})
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -309,9 +309,9 @@ func main() {
 					return
 				}
 				drivers, err := queries.GetNearbyDrivers(c.Request.Context(), db.GetNearbyDriversParams{
-					StMakepoint:   params.Longitude,
-					StMakepoint_2: params.Latitude,
-					Limit:         params.Limit,
+					Lng:        params.Longitude,
+					Lat:        params.Latitude,
+					LimitCount: params.Limit,
 				})
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

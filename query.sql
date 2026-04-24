@@ -5,17 +5,17 @@ VALUES (@email, @password_hash, @first_name, @last_name, @phone_number, @profile
 RETURNING *;
 
 -- name: GetUserByID :one
-SELECT * FROM users WHERE id = $1;
+SELECT * FROM users WHERE id = @id;
 
 -- name: GetUserByEmail :one
-SELECT * FROM users WHERE email = $1;
+SELECT * FROM users WHERE email = @email;
 
 -- User Roles
 -- name: AssignRoleToUser :exec
-INSERT INTO user_roles (user_id, role) VALUES ($1, $2);
+INSERT INTO user_roles (user_id, role) VALUES (@user_id, @role);
 
 -- name: GetUserRoles :many
-SELECT role FROM user_roles WHERE user_id = $1;
+SELECT role FROM user_roles WHERE user_id = @user_id;
 
 -- Businesses (The "Stalls")
 -- name: CreateBusiness :one
@@ -24,19 +24,19 @@ VALUES (@id, @owner_id, @name, @description, @logo_url, @banner_url, @miniservic
 RETURNING *;
 
 -- name: GetBusinessByID :one
-SELECT * FROM businesses WHERE id = $1;
+SELECT * FROM businesses WHERE id = @id;
 
 -- name: GetBusinessesByOwnerID :many
-SELECT * FROM businesses WHERE owner_id = $1;
+SELECT * FROM businesses WHERE owner_id = @owner_id;
 
 -- name: UpdateBusinessStatus :one
 UPDATE businesses 
-SET verification_status = $2, updated_at = CURRENT_TIMESTAMP
-WHERE id = $1
+SET verification_status = @status, updated_at = CURRENT_TIMESTAMP
+WHERE id = @id
 RETURNING *;
 
 -- name: ListBusinessesByType :many
-SELECT * FROM businesses WHERE miniservice_type = $1 AND verification_status = 'approved';
+SELECT * FROM businesses WHERE miniservice_type = @miniservice_type AND verification_status = 'approved';
 
 -- Products
 -- name: CreateProduct :one
@@ -45,14 +45,14 @@ VALUES (@id, @business_id, @name, @description, @price, @currency, @stock_quanti
 RETURNING *;
 
 -- name: GetProductsByBusiness :many
-SELECT * FROM products WHERE business_id = $1;
+SELECT * FROM products WHERE business_id = @business_id;
 
 -- name: GetProductByIDWithDetails :one
 SELECT p.*, b.name as brand_name, c.name as category_name
 FROM products p
 LEFT JOIN brands b ON p.brand_id = b.id
 LEFT JOIN categories c ON p.category_id = c.id
-WHERE p.id = $1;
+WHERE p.id = @id;
 
 -- name: GetFeaturedProducts :many
 SELECT p.*, b.name as brand_name, c.name as category_name
@@ -60,7 +60,7 @@ FROM products p
 LEFT JOIN brands b ON p.brand_id = b.id
 LEFT JOIN categories c ON p.category_id = c.id
 WHERE p.rating >= 4.0
-LIMIT $1;
+LIMIT @limit_count;
 
 -- name: GetFlashSaleProducts :many
 SELECT * FROM products WHERE is_flash_sale = TRUE AND (flash_sale_end_time IS NULL OR flash_sale_end_time > CURRENT_TIMESTAMP);
@@ -87,19 +87,19 @@ VALUES (@id, @name, @logo_url)
 RETURNING *;
 
 -- name: GetBrandByID :one
-SELECT * FROM brands WHERE id = $1;
+SELECT * FROM brands WHERE id = @id;
 
 -- name: ListBrands :many
 SELECT * FROM brands ORDER BY name;
 
 -- name: UpdateBrand :one
 UPDATE brands
-SET name = $1, logo_url = $2, updated_at = CURRENT_TIMESTAMP
-WHERE id = $3
+SET name = @name, logo_url = @logo_url, updated_at = CURRENT_TIMESTAMP
+WHERE id = @id
 RETURNING *;
 
 -- name: DeleteBrand :exec
-DELETE FROM brands WHERE id = $1;
+DELETE FROM brands WHERE id = @id;
 
 -- Product Variants
 -- name: CreateProductVariant :one
@@ -108,19 +108,19 @@ VALUES (@id, @product_id, @sku, @price, @stock_quantity, @attributes)
 RETURNING *;
 
 -- name: GetProductVariantsByProductID :many
-SELECT * FROM product_variants WHERE product_id = $1;
+SELECT * FROM product_variants WHERE product_id = @product_id;
 
 -- name: GetProductVariantByID :one
-SELECT * FROM product_variants WHERE id = $1;
+SELECT * FROM product_variants WHERE id = @id;
 
 -- name: UpdateProductVariant :one
 UPDATE product_variants
-SET sku = $1, price = $2, stock_quantity = $3, attributes = $4, updated_at = CURRENT_TIMESTAMP
-WHERE id = $5
+SET sku = @sku, price = @price, stock_quantity = @stock_quantity, attributes = @attributes, updated_at = CURRENT_TIMESTAMP
+WHERE id = @id
 RETURNING *;
 
 -- name: DeleteProductVariant :exec
-DELETE FROM product_variants WHERE id = $1;
+DELETE FROM product_variants WHERE id = @id;
 
 -- Product Discounts
 -- name: CreateProductDiscount :one
@@ -129,19 +129,19 @@ VALUES (@id, @product_id, @discount_type, @discount_value, @start_at, @end_at)
 RETURNING *;
 
 -- name: GetProductDiscountsByProductID :many
-SELECT * FROM product_discounts WHERE product_id = $1;
+SELECT * FROM product_discounts WHERE product_id = @product_id;
 
 -- name: GetProductDiscountByID :one
-SELECT * FROM product_discounts WHERE id = $1;
+SELECT * FROM product_discounts WHERE id = @id;
 
 -- name: UpdateProductDiscount :one
 UPDATE product_discounts
-SET discount_type = $1, discount_value = $2, start_at = $3, end_at = $4, updated_at = CURRENT_TIMESTAMP
-WHERE id = $5
+SET discount_type = @discount_type, discount_value = @discount_value, start_at = @start_at, end_at = @end_at, updated_at = CURRENT_TIMESTAMP
+WHERE id = @id
 RETURNING *;
 
 -- name: DeleteProductDiscount :exec
-DELETE FROM product_discounts WHERE id = $1;
+DELETE FROM product_discounts WHERE id = @id;
 
 -- Services
 -- name: CreateService :one
@@ -150,16 +150,16 @@ VALUES (@id, @business_id, @service_type, @name, @description, @base_price, @cur
 RETURNING *;
 
 -- name: ListServicesByBusiness :many
-SELECT * FROM services WHERE business_id = $1;
+SELECT * FROM services WHERE business_id = @business_id;
 
 -- name: ListServicesByType :many
-SELECT * FROM services WHERE service_type = $1 AND is_active = TRUE;
+SELECT * FROM services WHERE service_type = @service_type AND is_active = TRUE;
 
 -- name: GetServiceByID :one
-SELECT * FROM services WHERE id = $1;
+SELECT * FROM services WHERE id = @id;
 
 -- name: DeleteService :exec
-DELETE FROM services WHERE id = $1;
+DELETE FROM services WHERE id = @id;
 
 -- Service Bookings
 -- name: CreateServiceBooking :one
@@ -168,15 +168,15 @@ VALUES (@id, @user_id, @service_type, @service_item_id, @provider_id, @provider_
 RETURNING *;
 
 -- name: GetServiceBookingsByUserID :many
-SELECT * FROM service_bookings WHERE user_id = $1 ORDER BY created_at DESC;
+SELECT * FROM service_bookings WHERE user_id = @user_id ORDER BY created_at DESC;
 
 -- name: GetServiceBookingsByProviderID :many
-SELECT * FROM service_bookings WHERE provider_id = $1 ORDER BY created_at DESC;
+SELECT * FROM service_bookings WHERE provider_id = @provider_id ORDER BY created_at DESC;
 
 -- name: UpdateServiceBookingStatus :one
 UPDATE service_bookings
-SET status = $2, updated_at = CURRENT_TIMESTAMP
-WHERE id = $1
+SET status = @status, updated_at = CURRENT_TIMESTAMP
+WHERE id = @id
 RETURNING *;
 
 -- Properties
@@ -186,21 +186,21 @@ VALUES (@id, @business_id, @title, @description, @address_id, @price_per_night, 
 RETURNING *;
 
 -- name: GetPropertyByID :one
-SELECT * FROM properties WHERE id = $1;
+SELECT * FROM properties WHERE id = @id;
 
 -- name: ListPropertiesByBusiness :many
-SELECT * FROM properties WHERE business_id = $1;
+SELECT * FROM properties WHERE business_id = @business_id;
 
 -- name: ListProperties :many
 SELECT * FROM properties ORDER BY created_at DESC;
 
 -- name: SearchPropertiesByLocation :many
 SELECT p.*, b.name as business_name,
-       ST_Distance(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326)::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as distance_meters
+       ST_Distance(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326)::geography, ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography) as distance_meters
 FROM properties p
 JOIN businesses b ON p.business_id = b.id
 JOIN addresses a ON p.address_id = a.id
-WHERE ST_DWithin(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326)::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+WHERE ST_DWithin(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326)::geography, ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography, @radius)
 ORDER BY distance_meters ASC;
 
 -- Property Bookings
@@ -210,7 +210,7 @@ VALUES (@id, @user_id, @property_id, @check_in_date, @check_out_date, @total_amo
 RETURNING *;
 
 -- name: GetPropertyBookingsByUserID :many
-SELECT * FROM property_bookings WHERE user_id = $1 ORDER BY created_at DESC;
+SELECT * FROM property_bookings WHERE user_id = @user_id ORDER BY created_at DESC;
 
 -- Food Items
 -- name: CreateFoodItem :one
@@ -219,7 +219,7 @@ VALUES (@id, @business_id, @name, @description, @price, @currency, @image_url, @
 RETURNING *;
 
 -- name: ListFoodItemsByBusiness :many
-SELECT * FROM food_items WHERE business_id = $1;
+SELECT * FROM food_items WHERE business_id = @business_id;
 
 -- name: ListAllFoodItems :many
 SELECT f.*, b.name as restaurant_name 
@@ -235,25 +235,25 @@ RETURNING *;
 
 -- name: UpdateDriverLocation :one
 UPDATE drivers
-SET last_location = ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography,
+SET last_location = ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography,
     updated_at = CURRENT_TIMESTAMP
-WHERE user_id = $1
+WHERE user_id = @user_id
 RETURNING *;
 
 -- name: UpdateDriverStatus :one
 UPDATE drivers
-SET status = $2, updated_at = CURRENT_TIMESTAMP
-WHERE user_id = $1
+SET status = @status, updated_at = CURRENT_TIMESTAMP
+WHERE user_id = @user_id
 RETURNING *;
 
 -- name: GetNearbyDrivers :many
 SELECT d.*, 
-       ST_Distance(d.last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as distance_meters
+       ST_Distance(d.last_location, ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography) as distance_meters
 FROM drivers d
 WHERE d.status = 'online'
-  AND ST_DWithin(d.last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+  AND ST_DWithin(d.last_location, ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography, @radius)
 ORDER BY distance_meters ASC
-LIMIT $4;
+LIMIT @limit_count;
 
 -- Hubs
 -- name: GetHubs :many
@@ -279,16 +279,16 @@ VALUES (@id, @user_id, @driver_id, ST_SetSRID(ST_MakePoint(@pickup_lng, @pickup_
 RETURNING *;
 
 -- name: GetTaxiTripByID :one
-SELECT * FROM taxi_trips WHERE id = $1;
+SELECT * FROM taxi_trips WHERE id = @id;
 
 -- name: UpdateTaxiTripStatus :one
 UPDATE taxi_trips
-SET status = $2, 
-    accepted_at = CASE WHEN $2 = 'accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END,
-    started_at = CASE WHEN $2 = 'in_progress' THEN CURRENT_TIMESTAMP ELSE started_at END,
-    completed_at = CASE WHEN $2 = 'completed' THEN CURRENT_TIMESTAMP ELSE completed_at END,
+SET status = @status, 
+    accepted_at = CASE WHEN @status = 'accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END,
+    started_at = CASE WHEN @status = 'in_progress' THEN CURRENT_TIMESTAMP ELSE started_at END,
+    completed_at = CASE WHEN @status = 'completed' THEN CURRENT_TIMESTAMP ELSE completed_at END,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = $1
+WHERE id = @id
 RETURNING *;
 
 -- Cart & Orders
@@ -301,16 +301,16 @@ ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
 RETURNING *;
 
 -- name: GetCartItemsByUserID :many
-SELECT id, user_id, business_id, item_id, item_type, quantity, created_at, updated_at FROM cart_items WHERE user_id = $1 ORDER BY created_at DESC;
+SELECT id, user_id, business_id, item_id, item_type, quantity, created_at, updated_at FROM cart_items WHERE user_id = @user_id ORDER BY created_at DESC;
 
 -- name: UpdateCartItemQuantity :exec
-UPDATE cart_items SET quantity = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1;
+UPDATE cart_items SET quantity = @quantity, updated_at = CURRENT_TIMESTAMP WHERE id = @id;
 
 -- name: RemoveCartItem :exec
-DELETE FROM cart_items WHERE id = $1;
+DELETE FROM cart_items WHERE id = @id;
 
 -- name: ClearCart :exec
-DELETE FROM cart_items WHERE user_id = $1;
+DELETE FROM cart_items WHERE user_id = @user_id;
 
 -- name: CreateOrder :one
 INSERT INTO orders (id, user_id, total_amount, currency, status, shipping_address_id)
@@ -318,7 +318,7 @@ VALUES (@id, @user_id, @total_amount, @currency, @status, @shipping_address_id)
 RETURNING *;
 
 -- name: GetOrdersByUserID :many
-SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC;
+SELECT * FROM orders WHERE user_id = @user_id ORDER BY created_at DESC;
 
 -- name: CreateOrderItem :one
 INSERT INTO order_items (id, order_id, business_id, item_id, item_type, quantity, unit_price)
@@ -332,7 +332,7 @@ VALUES (@id, @user_id, @bio, @avatar_url)
 RETURNING *;
 
 -- name: GetC2CSellerByUserID :one
-SELECT * FROM c2c_sellers WHERE user_id = $1;
+SELECT * FROM c2c_sellers WHERE user_id = @user_id;
 
 -- name: CreateC2CListing :one
 INSERT INTO c2c_listings (id, seller_id, title, description, price, currency, image_urls, is_negotiable, location, condition, status)
@@ -340,7 +340,7 @@ VALUES (@id, @seller_id, @title, @description, @price, @currency, @image_urls, @
 RETURNING *;
 
 -- name: GetC2CListingByID :one
-SELECT * FROM c2c_listings WHERE id = $1;
+SELECT * FROM c2c_listings WHERE id = @id;
 
 -- name: ListC2CListings :many
 SELECT * FROM c2c_listings WHERE status = 'available' ORDER BY created_at DESC;
@@ -352,7 +352,7 @@ VALUES (@id, @target_id, @target_type, @user_id, @rating, @comment)
 RETURNING *;
 
 -- name: GetReviewsByTarget :many
-SELECT * FROM reviews WHERE target_id = $1 AND target_type = $2 ORDER BY created_at DESC;
+SELECT * FROM reviews WHERE target_id = @target_id AND target_type = @target_type ORDER BY created_at DESC;
 
 -- Grocery Items
 -- name: CreateGroceryItem :one
@@ -364,7 +364,7 @@ RETURNING *;
 SELECT * FROM grocery_items WHERE is_available = TRUE ORDER BY created_at DESC;
 
 -- name: ListGroceryItemsByBusiness :many
-SELECT * FROM grocery_items WHERE business_id = $1 ORDER BY created_at DESC;
+SELECT * FROM grocery_items WHERE business_id = @business_id ORDER BY created_at DESC;
 
 -- Liquor Items
 -- name: CreateLiquorItem :one
@@ -376,7 +376,7 @@ RETURNING *;
 SELECT * FROM liquor_items WHERE is_available = TRUE ORDER BY created_at DESC;
 
 -- name: ListLiquorItemsByBusiness :many
-SELECT * FROM liquor_items WHERE business_id = $1 ORDER BY created_at DESC;
+SELECT * FROM liquor_items WHERE business_id = @business_id ORDER BY created_at DESC;
 
 -- Pharmacy Items
 -- name: CreatePharmacyItem :one
@@ -388,7 +388,7 @@ RETURNING *;
 SELECT * FROM pharmacy_items WHERE is_available = TRUE ORDER BY created_at DESC;
 
 -- name: ListPharmacyItemsByBusiness :many
-SELECT * FROM pharmacy_items WHERE business_id = $1 ORDER BY created_at DESC;
+SELECT * FROM pharmacy_items WHERE business_id = @business_id ORDER BY created_at DESC;
 
 -- Bus Routes
 -- name: CreateBusRoute :one
@@ -418,7 +418,7 @@ VALUES (@id, @movie_id, @business_id, @show_time, @price, @currency, @room_numbe
 RETURNING *;
 
 -- name: ListMovieShowtimesByMovie :many
-SELECT * FROM movie_showtimes WHERE movie_id = $1 AND show_time > CURRENT_TIMESTAMP ORDER BY show_time ASC;
+SELECT * FROM movie_showtimes WHERE movie_id = @movie_id AND show_time > CURRENT_TIMESTAMP ORDER BY show_time ASC;
 
 -- Flights
 -- name: CreateFlight :one
@@ -445,14 +445,14 @@ VALUES (@id, @user_id, @biller_name, @account_number, @amount_due, @currency, @d
 RETURNING *;
 
 -- name: ListUserBills :many
-SELECT * FROM bills WHERE user_id = $1 ORDER BY due_date ASC;
+SELECT * FROM bills WHERE user_id = @user_id ORDER BY due_date ASC;
 
 -- Wallet
 -- name: GetWalletBalance :one
-SELECT * FROM user_wallet WHERE user_id = $1;
+SELECT * FROM user_wallet WHERE user_id = @user_id;
 
 -- name: UpdateWalletBalance :one
-UPDATE user_wallet SET balance = $2, last_updated = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING *;
+UPDATE user_wallet SET balance = @balance, last_updated = CURRENT_TIMESTAMP WHERE user_id = @user_id RETURNING *;
 
 -- Messages
 -- name: CreateMessage :one
@@ -461,7 +461,7 @@ VALUES (@id, @sender_id, @receiver_id, @content)
 RETURNING *;
 
 -- name: ListUserMessages :many
-SELECT * FROM messages WHERE sender_id = $1 OR receiver_id = $1 ORDER BY created_at DESC;
+SELECT * FROM messages WHERE sender_id = @id OR receiver_id = @id ORDER BY created_at DESC;
 
 -- Notifications
 -- name: CreateNotification :one
@@ -470,10 +470,10 @@ VALUES (@id, @user_id, @title, @body, @type)
 RETURNING *;
 
 -- name: ListUserNotifications :many
-SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC;
+SELECT * FROM notifications WHERE user_id = @user_id ORDER BY created_at DESC;
 
 -- name: MarkNotificationAsRead :exec
-UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2;
+UPDATE notifications SET is_read = TRUE WHERE id = @id AND user_id = @user_id;
 
 -- Tours
 -- name: CreateTour :one

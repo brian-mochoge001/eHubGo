@@ -185,9 +185,9 @@ func (h *PropertyHandler) SearchProperties(c *gin.Context) {
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		properties, err := qtx.SearchPropertiesByLocation(c.Request.Context(), db.SearchPropertiesByLocationParams{
-			StMakepoint:   params.Longitude,
-			StMakepoint_2: params.Latitude,
-			StDwithin:     params.Radius,
+			Lng:    params.Longitude,
+			Lat:    params.Latitude,
+			Radius: params.Radius,
 		})
 		if err != nil {
 			return err
