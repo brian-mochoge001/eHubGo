@@ -141,9 +141,13 @@ func main() {
 	// Initialize Firebase Admin SDK
 	var opts []option.ClientOption
 	if serviceAccountJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT_JSON"); serviceAccountJSON != "" {
+		fmt.Println("Initializing Firebase with JSON from environment variable")
 		opts = append(opts, option.WithCredentialsJSON([]byte(serviceAccountJSON)))
 	} else if serviceAccountPath := os.Getenv("FIREBASE_SERVICE_ACCOUNT_PATH"); serviceAccountPath != "" {
+		fmt.Printf("Initializing Firebase with file from path: %s\n", serviceAccountPath)
 		opts = append(opts, option.WithCredentialsFile(serviceAccountPath))
+	} else {
+		fmt.Println("Warning: No Firebase credentials provided via environment variables. Falling back to default credentials.")
 	}
 
 	fbApp, err := firebase.NewApp(context.Background(), nil, opts...)
@@ -311,6 +315,7 @@ func main() {
 				drivers, err := queries.GetNearbyDrivers(c.Request.Context(), db.GetNearbyDriversParams{
 					Lng:        params.Longitude,
 					Lat:        params.Latitude,
+					Radius:     2000.0, // Default 2km radius
 					LimitCount: params.Limit,
 				})
 				if err != nil {
