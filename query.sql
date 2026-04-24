@@ -20,7 +20,7 @@ SELECT role FROM user_roles WHERE user_id = $1;
 -- Businesses (The "Stalls")
 -- name: CreateBusiness :one
 INSERT INTO businesses (id, owner_id, name, description, logo_url, banner_url, miniservice_type, address_id, phone_number, email)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES (@id, @owner_id, @name, @description, @logo_url, @banner_url, @miniservice_type, @address_id, @phone_number, @email)
 RETURNING *;
 
 -- name: GetBusinessByID :one
@@ -41,7 +41,7 @@ SELECT * FROM businesses WHERE miniservice_type = $1 AND verification_status = '
 -- Products
 -- name: CreateProduct :one
 INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, is_flash_sale, discount_percentage)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES (@id, @business_id, @name, @description, @price, @currency, @stock_quantity, @category_id, @brand_id, @is_flash_sale, @discount_percentage)
 RETURNING *;
 
 -- name: GetProductsByBusiness :many
@@ -83,7 +83,7 @@ WHERE id = @id AND stock_quantity >= @stock_quantity;
 -- Brands
 -- name: CreateBrand :one
 INSERT INTO brands (id, name, logo_url)
-VALUES ($1, $2, $3)
+VALUES (@id, @name, @logo_url)
 RETURNING *;
 
 -- name: GetBrandByID :one
@@ -104,7 +104,7 @@ DELETE FROM brands WHERE id = $1;
 -- Product Variants
 -- name: CreateProductVariant :one
 INSERT INTO product_variants (id, product_id, sku, price, stock_quantity, attributes)
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES (@id, @product_id, @sku, @price, @stock_quantity, @attributes)
 RETURNING *;
 
 -- name: GetProductVariantsByProductID :many
@@ -125,7 +125,7 @@ DELETE FROM product_variants WHERE id = $1;
 -- Product Discounts
 -- name: CreateProductDiscount :one
 INSERT INTO product_discounts (id, product_id, discount_type, discount_value, start_at, end_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES (@id, @product_id, @discount_type, @discount_value, @start_at, @end_at)
 RETURNING *;
 
 -- name: GetProductDiscountsByProductID :many
@@ -146,7 +146,7 @@ DELETE FROM product_discounts WHERE id = $1;
 -- Services
 -- name: CreateService :one
 INSERT INTO services (id, business_id, service_type, name, description, base_price, currency, location)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES (@id, @business_id, @service_type, @name, @description, @base_price, @currency, @location)
 RETURNING *;
 
 -- name: ListServicesByBusiness :many
@@ -164,7 +164,7 @@ DELETE FROM services WHERE id = $1;
 -- Service Bookings
 -- name: CreateServiceBooking :one
 INSERT INTO service_bookings (id, user_id, service_type, service_item_id, provider_id, provider_type, start_time, end_time, total_amount, currency, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES (@id, @user_id, @service_type, @service_item_id, @provider_id, @provider_type, @start_time, @end_time, @total_amount, @currency, @status)
 RETURNING *;
 
 -- name: GetServiceBookingsByUserID :many
@@ -182,7 +182,7 @@ RETURNING *;
 -- Properties
 -- name: CreateProperty :one
 INSERT INTO properties (id, business_id, title, description, address_id, price_per_night, currency, number_of_guests, number_of_bedrooms, type, image_urls)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES (@id, @business_id, @title, @description, @address_id, @price_per_night, @currency, @number_of_guests, @number_of_bedrooms, @type, @image_urls)
 RETURNING *;
 
 -- name: GetPropertyByID :one
@@ -206,7 +206,7 @@ ORDER BY distance_meters ASC;
 -- Property Bookings
 -- name: CreatePropertyBooking :one
 INSERT INTO property_bookings (id, user_id, property_id, check_in_date, check_out_date, total_amount, currency, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES (@id, @user_id, @property_id, @check_in_date, @check_out_date, @total_amount, @currency, @status)
 RETURNING *;
 
 -- name: GetPropertyBookingsByUserID :many
@@ -214,8 +214,8 @@ SELECT * FROM property_bookings WHERE user_id = $1 ORDER BY created_at DESC;
 
 -- Food Items
 -- name: CreateFoodItem :one
-INSERT INTO food_items (id, business_id, name, description, price, currency, image_url)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO food_items (id, business_id, name, description, price, currency, image_url, is_available)
+VALUES (@id, @business_id, @name, @description, @price, @currency, @image_url, @is_available)
 RETURNING *;
 
 -- name: ListFoodItemsByBusiness :many
@@ -230,7 +230,7 @@ ORDER BY f.created_at DESC;
 -- Drivers & Taxi
 -- name: CreateDriver :one
 INSERT INTO drivers (id, user_id, name, status, vehicle_type_id)
-VALUES ($1, $2, $3, $4, $5)
+VALUES (@id, @user_id, @name, @status, @vehicle_type_id)
 RETURNING *;
 
 -- name: UpdateDriverLocation :one
@@ -261,7 +261,7 @@ SELECT * FROM hubs;
 
 -- name: CreateHub :one
 INSERT INTO hubs (id, name, description)
-VALUES ($1, $2, $3)
+VALUES (@id, @name, @description)
 RETURNING *;
 
 -- Tasks
@@ -270,12 +270,12 @@ SELECT * FROM tasks;
 
 -- name: CreateTask :one
 INSERT INTO tasks (id, title, priority)
-VALUES ($1, $2, $3)
+VALUES (@id, @title, @priority)
 RETURNING *;
 
 -- name: CreateTaxiTrip :one
 INSERT INTO taxi_trips (id, user_id, driver_id, pickup_location, dropoff_location, total_amount, currency, status)
-VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, ST_SetSRID(ST_MakePoint($6, $7), 4326)::geography, $8, $9, 'requested')
+VALUES (@id, @user_id, @driver_id, ST_SetSRID(ST_MakePoint(@pickup_lng, @pickup_lat), 4326)::geography, ST_SetSRID(ST_MakePoint(@dropoff_lng, @dropoff_lat), 4326)::geography, @total_amount, @currency, 'requested')
 RETURNING *;
 
 -- name: GetTaxiTripByID :one
@@ -294,7 +294,7 @@ RETURNING *;
 -- Cart & Orders
 -- name: AddItemToCart :one
 INSERT INTO cart_items (id, user_id, business_id, item_id, item_type, quantity)
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES (@id, @user_id, @business_id, @item_id, @item_type, @quantity)
 ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
   quantity = cart_items.quantity + EXCLUDED.quantity,
   updated_at = CURRENT_TIMESTAMP
@@ -314,7 +314,7 @@ DELETE FROM cart_items WHERE user_id = $1;
 
 -- name: CreateOrder :one
 INSERT INTO orders (id, user_id, total_amount, currency, status, shipping_address_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES (@id, @user_id, @total_amount, @currency, @status, @shipping_address_id)
 RETURNING *;
 
 -- name: GetOrdersByUserID :many
@@ -322,13 +322,13 @@ SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC;
 
 -- name: CreateOrderItem :one
 INSERT INTO order_items (id, order_id, business_id, item_id, item_type, quantity, unit_price)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+VALUES (@id, @order_id, @business_id, @item_id, @item_type, @quantity, @unit_price)
 RETURNING *;
 
 -- C2C Marketplace
 -- name: CreateC2CSeller :one
 INSERT INTO c2c_sellers (id, user_id, bio, avatar_url)
-VALUES ($1, $2, $3, $4)
+VALUES (@id, @user_id, @bio, @avatar_url)
 RETURNING *;
 
 -- name: GetC2CSellerByUserID :one
@@ -336,7 +336,7 @@ SELECT * FROM c2c_sellers WHERE user_id = $1;
 
 -- name: CreateC2CListing :one
 INSERT INTO c2c_listings (id, seller_id, title, description, price, currency, image_urls, is_negotiable, location, condition, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES (@id, @seller_id, @title, @description, @price, @currency, @image_urls, @is_negotiable, @location, @condition, @status)
 RETURNING *;
 
 -- name: GetC2CListingByID :one
@@ -348,7 +348,7 @@ SELECT * FROM c2c_listings WHERE status = 'available' ORDER BY created_at DESC;
 -- Reviews
 -- name: AddReview :one
 INSERT INTO reviews (id, target_id, target_type, user_id, rating, comment)
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES (@id, @target_id, @target_type, @user_id, @rating, @comment)
 RETURNING *;
 
 -- name: GetReviewsByTarget :many
@@ -356,8 +356,8 @@ SELECT * FROM reviews WHERE target_id = $1 AND target_type = $2 ORDER BY created
 
 -- Grocery Items
 -- name: CreateGroceryItem :one
-INSERT INTO grocery_items (id, business_id, name, description, price, currency, image_url, unit, stock_quantity, category)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO grocery_items (id, business_id, name, description, price, currency, image_url, unit, stock_quantity, category, is_available)
+VALUES (@id, @business_id, @name, @description, @price, @currency, @image_url, @unit, @stock_quantity, @category, @is_available)
 RETURNING *;
 
 -- name: ListGroceryItems :many
@@ -368,8 +368,8 @@ SELECT * FROM grocery_items WHERE business_id = $1 ORDER BY created_at DESC;
 
 -- Liquor Items
 -- name: CreateLiquorItem :one
-INSERT INTO liquor_items (id, business_id, name, description, price, currency, image_url, volume, abv, stock_quantity, category)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+INSERT INTO liquor_items (id, business_id, name, description, price, currency, image_url, volume, abv, stock_quantity, category, is_available)
+VALUES (@id, @business_id, @name, @description, @price, @currency, @image_url, @volume, @abv, @stock_quantity, @category, @is_available)
 RETURNING *;
 
 -- name: ListLiquorItems :many
@@ -380,8 +380,8 @@ SELECT * FROM liquor_items WHERE business_id = $1 ORDER BY created_at DESC;
 
 -- Pharmacy Items
 -- name: CreatePharmacyItem :one
-INSERT INTO pharmacy_items (id, business_id, name, description, price, currency, image_url, requires_prescription, stock_quantity, category)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+INSERT INTO pharmacy_items (id, business_id, name, description, price, currency, image_url, requires_prescription, stock_quantity, category, is_available)
+VALUES (@id, @business_id, @name, @description, @price, @currency, @image_url, @requires_prescription, @stock_quantity, @category, @is_available)
 RETURNING *;
 
 -- name: ListPharmacyItems :many
@@ -393,7 +393,7 @@ SELECT * FROM pharmacy_items WHERE business_id = $1 ORDER BY created_at DESC;
 -- Bus Routes
 -- name: CreateBusRoute :one
 INSERT INTO bus_routes (id, business_id, origin, destination, departure_time, arrival_time, price, currency, available_seats, bus_type)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES (@id, @business_id, @origin, @destination, @departure_time, @arrival_time, @price, @currency, @available_seats, @bus_type)
 RETURNING *;
 
 -- name: ListBusRoutes :many
@@ -402,7 +402,7 @@ SELECT * FROM bus_routes WHERE departure_time > CURRENT_TIMESTAMP ORDER BY depar
 -- Movies
 -- name: CreateMovie :one
 INSERT INTO movies (id, title, description, genre, rating, duration_minutes, poster_url, is_now_playing, release_date)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES (@id, @title, @description, @genre, @rating, @duration_minutes, @poster_url, @is_now_playing, @release_date)
 RETURNING *;
 
 -- name: ListNowPlayingMovies :many
@@ -414,7 +414,7 @@ SELECT * FROM movies WHERE is_now_playing = FALSE AND release_date > CURRENT_DAT
 -- Movie Showtimes
 -- name: CreateMovieShowtime :one
 INSERT INTO movie_showtimes (id, movie_id, business_id, show_time, price, currency, room_number, available_seats)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES (@id, @movie_id, @business_id, @show_time, @price, @currency, @room_number, @available_seats)
 RETURNING *;
 
 -- name: ListMovieShowtimesByMovie :many
@@ -423,7 +423,7 @@ SELECT * FROM movie_showtimes WHERE movie_id = $1 AND show_time > CURRENT_TIMEST
 -- Flights
 -- name: CreateFlight :one
 INSERT INTO flights (id, airline_name, flight_number, origin, destination, departure_time, arrival_time, price, currency, class_type, available_seats)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES (@id, @airline_name, @flight_number, @origin, @destination, @departure_time, @arrival_time, @price, @currency, @class_type, @available_seats)
 RETURNING *;
 
 -- name: ListFlights :many
@@ -432,7 +432,7 @@ SELECT * FROM flights WHERE departure_time > CURRENT_TIMESTAMP ORDER BY departur
 -- Jobs
 -- name: CreateJob :one
 INSERT INTO jobs (id, business_id, title, description, category, job_type, location, salary_range, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES (@id, @business_id, @title, @description, @category, @job_type, @location, @salary_range, @expires_at)
 RETURNING *;
 
 -- name: ListActiveJobs :many
@@ -441,7 +441,7 @@ SELECT * FROM jobs WHERE is_active = TRUE AND (expires_at IS NULL OR expires_at 
 -- Bills
 -- name: CreateBill :one
 INSERT INTO bills (id, user_id, biller_name, account_number, amount_due, currency, due_date, category)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES (@id, @user_id, @biller_name, @account_number, @amount_due, @currency, @due_date, @category)
 RETURNING *;
 
 -- name: ListUserBills :many
@@ -457,7 +457,7 @@ UPDATE user_wallet SET balance = $2, last_updated = CURRENT_TIMESTAMP WHERE user
 -- Messages
 -- name: CreateMessage :one
 INSERT INTO messages (id, sender_id, receiver_id, content)
-VALUES ($1, $2, $3, $4)
+VALUES (@id, @sender_id, @receiver_id, @content)
 RETURNING *;
 
 -- name: ListUserMessages :many
@@ -466,7 +466,7 @@ SELECT * FROM messages WHERE sender_id = $1 OR receiver_id = $1 ORDER BY created
 -- Notifications
 -- name: CreateNotification :one
 INSERT INTO notifications (id, user_id, title, body, type)
-VALUES ($1, $2, $3, $4, $5)
+VALUES (@id, @user_id, @title, @body, @type)
 RETURNING *;
 
 -- name: ListUserNotifications :many
@@ -478,7 +478,7 @@ UPDATE notifications SET is_read = TRUE WHERE id = $1 AND user_id = $2;
 -- Tours
 -- name: CreateTour :one
 INSERT INTO tours (id, business_id, title, description, location, price, currency, image_url, duration)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES (@id, @business_id, @title, @description, @location, @price, @currency, @image_url, @duration)
 RETURNING *;
 
 -- name: ListTours :many
