@@ -102,17 +102,40 @@ func ToProductDTOFromDetails(p db.GetProductByIDWithDetailsRow) ProductDTO {
 	}
 }
 
-// ListFeaturedProducts returns best-selling and verified products
+func ToProductDTOFromGetProducts(p db.GetProductsRow) ProductDTO {
+	return ProductDTO{
+		ID:                 p.ID,
+		BusinessID:         p.BusinessID,
+		Name:               p.Name,
+		Description:        NullStringToString(p.Description),
+		Price:              p.Price,
+		Currency:           p.Currency,
+		StockQuantity:      p.StockQuantity,
+		CategoryID:         NullStringToString(p.CategoryID),
+		BrandID:            NullStringToString(p.BrandID),
+		Rating:             NullStringToString(p.Rating),
+		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
+		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
+		DiscountPercentage: NullStringToString(p.DiscountPercentage),
+		CreatedAt:          NullTimeToTime(p.CreatedAt),
+		UpdatedAt:          NullTimeToTime(p.UpdatedAt),
+	}
+}
+
+// ListFeaturedProducts returns best-selling and verified products with pagination
 func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
-	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		limit = 10
-	}
+	offsetStr := c.DefaultQuery("offset", "0")
+	
+	limit, _ := strconv.Atoi(limitStr)
+	offset, _ := strconv.Atoi(offsetStr)
 
-	err = WithRLS(c, h.DB, func(tx *sql.Tx) error {
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		products, err := qtx.GetFeaturedProducts(c.Request.Context(), int32(limit))
+		products, err := qtx.GetFeaturedProducts(c.Request.Context(), db.GetFeaturedProductsParams{
+			OffsetCount: int32(offset),
+			LimitCount:  int32(limit),
+		})
 		if err != nil {
 			return err
 		}
@@ -363,31 +386,20 @@ func ToCategoryDTO(cat db.Category) CategoryDTO {
 	}
 }
 
-func ToProductDTOFromGetProducts(p db.GetProductsRow) ProductDTO {
-	return ProductDTO{
-		ID:                 p.ID,
-		BusinessID:         p.BusinessID,
-		Name:               p.Name,
-		Description:        NullStringToString(p.Description),
-		Price:              p.Price,
-		Currency:           p.Currency,
-		StockQuantity:      p.StockQuantity,
-		CategoryID:         NullStringToString(p.CategoryID),
-		BrandID:            NullStringToString(p.BrandID),
-		Rating:             NullStringToString(p.Rating),
-		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
-		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
-		DiscountPercentage: NullStringToString(p.DiscountPercentage),
-		CreatedAt:          NullTimeToTime(p.CreatedAt),
-		UpdatedAt:          NullTimeToTime(p.UpdatedAt),
-	}
-}
-
-// ListProducts returns all products
+// ListProducts returns all products with pagination
 func (h *EcommerceHandler) ListProducts(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "10")
+	offsetStr := c.DefaultQuery("offset", "0")
+	
+	limit, _ := strconv.Atoi(limitStr)
+	offset, _ := strconv.Atoi(offsetStr)
+
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		products, err := qtx.GetProducts(c.Request.Context())
+		products, err := qtx.GetProducts(c.Request.Context(), db.GetProductsParams{
+			OffsetCount: int32(offset),
+			LimitCount:  int32(limit),
+		})
 		if err != nil {
 			return err
 		}
@@ -452,11 +464,20 @@ func (h *EcommerceHandler) ListCategories(c *gin.Context) {
 	}
 }
 
-// ListFlashSaleProducts returns flash sale products
+// ListFlashSaleProducts returns flash sale products with pagination
 func (h *EcommerceHandler) ListFlashSaleProducts(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "10")
+	offsetStr := c.DefaultQuery("offset", "0")
+	
+	limit, _ := strconv.Atoi(limitStr)
+	offset, _ := strconv.Atoi(offsetStr)
+
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		products, err := qtx.GetFlashSaleProducts(c.Request.Context())
+		products, err := qtx.GetFlashSaleProducts(c.Request.Context(), db.GetFlashSaleProductsParams{
+			OffsetCount: int32(offset),
+			LimitCount:  int32(limit),
+		})
 		if err != nil {
 			return err
 		}

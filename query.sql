@@ -60,16 +60,18 @@ FROM products p
 LEFT JOIN brands b ON p.brand_id = b.id
 LEFT JOIN categories c ON p.category_id = c.id
 WHERE p.rating >= 4.0
-LIMIT @limit_count;
+LIMIT @limit_count OFFSET @offset_count;
 
 -- name: GetFlashSaleProducts :many
-SELECT * FROM products WHERE is_flash_sale = TRUE AND (flash_sale_end_time IS NULL OR flash_sale_end_time > CURRENT_TIMESTAMP);
+SELECT * FROM products WHERE is_flash_sale = TRUE AND (flash_sale_end_time IS NULL OR flash_sale_end_time > CURRENT_TIMESTAMP)
+LIMIT @limit_count OFFSET @offset_count;
 
 -- name: GetProducts :many
 SELECT p.*, b.name as brand_name, c.name as category_name
 FROM products p
 LEFT JOIN brands b ON p.brand_id = b.id
-LEFT JOIN categories c ON p.category_id = c.id;
+LEFT JOIN categories c ON p.category_id = c.id
+LIMIT @limit_count OFFSET @offset_count;
 
 -- name: GetCategories :many
 SELECT id, name, description, image_url, parent_id, created_at, updated_at FROM categories

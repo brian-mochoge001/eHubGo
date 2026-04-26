@@ -203,9 +203,9 @@ func main() {
 			description string
 			image       string
 		}{
-			{"iPhone 15 Pro", "120000.00", "Titanium design, A17 Pro chip.", "https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=400"},
-			{"AirPods Pro (2nd Gen)", "35000.00", "Active Noise Cancellation.", "https://images.unsplash.com/photo-1588423771073-b8903fbb85b5?w=400"},
-			{"Samsung Galaxy S24", "110000.00", "Galaxy AI is here.", "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400"},
+			{"iPhone 15 Pro", "180000.00", "Titanium design, A17 Pro chip.", "https://alephksa.com/cdn/shop/files/iPhone_15_Pro_Natural_Titanium_PDP_Image_Position-1__en-ME.jpg?v=1694758467&width=1445"},
+			{"AirPods Pro (2nd Gen)", "22500.00", "Active Noise Cancellation.", "https://applecenter.co.ke/wp-content/uploads/2023/11/MTJV3.jpeg"},
+			{"Samsung Galaxy S24 Ultra", "159999.00", "Galaxy AI is here.", "https://kulan.co.ke/wp-content/uploads/2025/01/Samsung-Galaxy-S24-Ultra-256GB-East-Africa.jpg"},
 		}
 
 		for _, p := range products {
