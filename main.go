@@ -168,6 +168,10 @@ func main() {
 	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))
 
+	r.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "hello ehub is running")
+	})
+
 	api := r.Group("/api/v1")
 	{
 		api.GET("/health", func(c *gin.Context) {
@@ -300,33 +304,6 @@ func main() {
 				c.JSON(http.StatusOK, driver)
 			})
 
-			// ... (skip nearby drivers fix for now) ...
-
-			protected.GET("/drivers/nearby", func(c *gin.Context) {
-				var params struct {
-					Longitude float64 `form:"longitude" binding:"required"`
-					Latitude  float64 `form:"latitude" binding:"required"`
-					Limit     int32   `form:"limit,default=5"`
-				}
-				if err := c.ShouldBindQuery(&params); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-					return
-				}
-				drivers, err := queries.GetNearbyDrivers(c.Request.Context(), db.GetNearbyDriversParams{
-					Lng:        params.Longitude,
-					Lat:        params.Latitude,
-					Radius:     2000.0, // Default 2km radius
-					LimitCount: params.Limit,
-				})
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-					return
-				}
-				c.JSON(http.StatusOK, drivers)
-			})
-
-			// ... (skip services fix) ...
-
 			protected.DELETE("/services/:id", func(c *gin.Context) {
 				id := c.Param("id")
 				err := queries.DeleteService(c.Request.Context(), id)
@@ -336,8 +313,6 @@ func main() {
 				}
 				c.JSON(http.StatusNoContent, nil) // 204 No Content for successful deletion
 			})
-
-			// ... (skip vendor verification fix) ...
 
 			// User Endpoints
 			protected.GET("/wallet/balance", userHandler.GetWalletBalance)

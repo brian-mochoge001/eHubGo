@@ -20,12 +20,12 @@ func WithRLS(c *gin.Context, dbConn *sql.DB, fn func(tx *sql.Tx) error) error {
 	defer tx.Rollback()
 
 	// Set session variables for RLS
-	// We use QueryContext or ExecContext within the transaction
-	_, err = tx.ExecContext(c.Request.Context(), fmt.Sprintf("SET LOCAL app.current_user_id = '%s'", userID))
+	// We use set_config to safely set session variables with parameters
+	_, err = tx.ExecContext(c.Request.Context(), "SELECT set_config('app.current_user_id', $1, true)", fmt.Sprintf("%v", userID))
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(c.Request.Context(), fmt.Sprintf("SET LOCAL app.current_user_roles = '%s'", userRoles))
+	_, err = tx.ExecContext(c.Request.Context(), "SELECT set_config('app.current_user_roles', $1, true)", fmt.Sprintf("%v", userRoles))
 	if err != nil {
 		return err
 	}
