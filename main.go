@@ -3,14 +3,14 @@ package main
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
 	"ehubgo/db"
 	"ehubgo/handlers"
- 
+
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-contrib/cors"
@@ -56,7 +56,7 @@ func AuthMiddleware(authClient *auth.Client, dbConn *sql.DB) gin.HandlerFunc {
 				firstName = parts[0]
 			}
 			// Create user record immediately so we can assign roles/data
-			_, _ = dbConn.ExecContext(c.Request.Context(), 
+			_, _ = dbConn.ExecContext(c.Request.Context(),
 				"INSERT INTO users (id, email, first_name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
 				token.UID, email, firstName)
 		}
@@ -73,7 +73,7 @@ func AuthMiddleware(authClient *auth.Client, dbConn *sql.DB) gin.HandlerFunc {
 				}
 			}
 		}
-		
+
 		if len(roles) == 0 {
 			roles = append(roles, "customer")
 		}
@@ -119,18 +119,42 @@ func main() {
 	}
 	defer conn.Close()
 
+	if err := conn.Ping(); err != nil {
+		log.Fatal("Database is not reachable:", err)
+	}
+
 	queries := db.New(conn)
+	
+	// Core Handlers
+	businessHandler := handlers.NewBusinessHandler(queries, conn)
+	userHandler := handlers.NewUserHandler(queries, conn)
+	
+	// Miniservice Handlers
 	ecommerceHandler := handlers.NewEcommerceHandler(queries, conn)
 	cartHandler := handlers.NewCartHandler(queries, conn)
 	reviewHandler := handlers.NewReviewHandler(queries, conn)
-	businessHandler := handlers.NewBusinessHandler(queries, conn)
 	serviceHandler := handlers.NewServiceHandler(queries, conn)
 	propertyHandler := handlers.NewPropertyHandler(queries, conn)
 	c2cHandler := handlers.NewC2CHandler(queries, conn)
 	taxiHandler := handlers.NewTaxiHandler(queries, conn)
-	userHandler := handlers.NewUserHandler(queries, conn)
-	extraHandler := handlers.NewServicesExtraHandler(queries, conn)
-	specHandler := handlers.NewSpecializedHandler(queries, conn)
+	
+	// Specialized Miniservice Handlers
+	laundryHandler := handlers.NewLaundryHandler(queries, conn)
+	cleanHandler := handlers.NewCleanHandler(queries, conn)
+	repairHandler := handlers.NewRepairHandler(queries, conn)
+	healthHandler := handlers.NewHealthHandler(queries, conn)
+	groceryHandler := handlers.NewGroceryHandler(queries, conn)
+	liquorHandler := handlers.NewLiquorHandler(queries, conn)
+	foodHandler := handlers.NewFoodHandler(queries, conn)
+	busHandler := handlers.NewBusHandler(queries, conn)
+	cinemaHandler := handlers.NewCinemaHandler(queries, conn)
+	flightsHandler := handlers.NewFlightsHandler(queries, conn)
+	jobsHandler := handlers.NewJobsHandler(queries, conn)
+	travelHandler := handlers.NewTravelHandler(queries, conn)
+	billsHandler := handlers.NewBillsHandler(queries, conn)
+	payHandler := handlers.NewPayHandler(queries, conn)
+	b2bHandler := handlers.NewB2BHandler(queries, conn)
+	deliveryHandler := handlers.NewDeliveryHandler(queries, conn)
 
 	var opts []option.ClientOption
 	if serviceAccountJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT_JSON"); serviceAccountJSON != "" {
@@ -166,23 +190,55 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 
-		// Public browsing
+		// --- Public Miniservice Discovery ---
+		
+		// Shopping
 		api.GET("/featured-products", ecommerceHandler.ListFeaturedProducts)
 		api.GET("/products", ecommerceHandler.ListProducts)
 		api.GET("/products/:id", ecommerceHandler.GetProductByID)
 		api.GET("/categories", ecommerceHandler.ListCategories)
+		
+		// Specialized Stores
+		api.GET("/groceries", groceryHandler.ListGroceryItems)
+		api.GET("/liquor", liquorHandler.ListLiquorItems)
+		api.GET("/pharmacy", healthHandler.ListPharmacyItems)
+		api.GET("/food-items/all", foodHandler.ListAllFoodItems)
+		
+		// Services (Generic Listing)
+		api.GET("/services/laundry", laundryHandler.ListLaundryServices)
+		api.GET("/services/cleaning", cleanHandler.ListCleaningServices)
+		api.GET("/services/repair", repairHandler.ListRepairServices)
+		api.GET("/services/health", healthHandler.ListHealthServices)
+		api.GET("/services/b2b", b2bHandler.ListB2BServices)
+		api.GET("/services/delivery", deliveryHandler.ListDeliveryOptions)
+		
+		// Travel & Transport
+		api.GET("/bus/routes", busHandler.ListBusRoutes)
+		api.GET("/flights", flightsHandler.ListFlights)
+		api.GET("/tours", travelHandler.ListTours)
+		api.GET("/drivers/nearby", taxiHandler.GetNearbyDrivers)
+		
+		// Accomodation
+		api.GET("/properties", propertyHandler.ListProperties)
+		api.GET("/properties/search", propertyHandler.SearchProperties)
+		api.GET("/properties/:id", propertyHandler.GetProperty)
+		
+		// Entertainment & Jobs
+		api.GET("/cinema/movies/now-playing", cinemaHandler.ListNowPlayingMovies)
+		api.GET("/cinema/movies/coming-soon", cinemaHandler.ListComingSoonMovies)
+		api.GET("/cinema/movies/:id/showtimes", cinemaHandler.ListMovieShowtimes)
+		api.GET("/jobs", jobsHandler.ListJobs)
+		
+		// C2C Marketplace
+		api.GET("/c2c/listings", c2cHandler.ListC2CListings)
+		api.GET("/c2c/listings/:id", c2cHandler.GetC2CListing)
+		
+		// Common
 		api.GET("/businesses", businessHandler.ListBusinesses)
 		api.GET("/businesses/:id", businessHandler.GetBusinessProfile)
-		api.GET("/bus/routes", extraHandler.ListBusRoutes)
-		api.GET("/groceries", specHandler.ListGroceryItems)
-		api.GET("/liquor", specHandler.ListLiquorItems)
-		api.GET("/pharmacy", specHandler.ListPharmacyItems)
-		api.GET("/food-items/all", specHandler.ListAllFoodItems)
-		api.GET("/properties", propertyHandler.ListProperties)
-		api.GET("/c2c/listings", c2cHandler.ListC2CListings)
 		api.GET("/reviews", reviewHandler.GetReviewsByTarget)
 
-		// Protected RBAC routes
+		// --- Protected RBAC routes ---
 		authRequired := api.Group("/")
 		authRequired.Use(RequireAuth())
 		{
@@ -198,12 +254,12 @@ func main() {
 					ProfileUrl  string `json:"profile_picture_url"`
 				}
 
-				err := conn.QueryRowContext(c.Request.Context(), 
-					"SELECT id, email, first_name, COALESCE(last_name, ''), COALESCE(profile_picture_url, '') FROM users WHERE id = $1", 
+				err := conn.QueryRowContext(c.Request.Context(),
+					"SELECT id, email, first_name, COALESCE(last_name, ''), COALESCE(profile_picture_url, '') FROM users WHERE id = $1",
 					uid).Scan(&user.ID, &user.Email, &user.FirstName, &user.LastName, &user.ProfileUrl)
-				
+
 				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "Identity mapping failed"})
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to map identity"})
 					return
 				}
 
@@ -216,29 +272,54 @@ func main() {
 				})
 			})
 
+			// Business Onboarding
 			authRequired.POST("/businesses", businessHandler.RegisterBusiness)
 			authRequired.GET("/businesses/me", businessHandler.GetMyMall)
+
+			// Cart & Checkout
 			authRequired.GET("/cart", cartHandler.GetCart)
 			authRequired.POST("/cart", cartHandler.AddToCart)
 			authRequired.PUT("/cart/:id", ecommerceHandler.UpdateCartItemQuantity)
 			authRequired.DELETE("/cart/:id", cartHandler.RemoveCartItem)
 			authRequired.POST("/checkout", ecommerceHandler.Checkout)
 			authRequired.GET("/orders", ecommerceHandler.GetOrders)
-			authRequired.POST("/services/listings", serviceHandler.CreateServiceListing)
+
+			// Service Bookings
 			authRequired.POST("/services/book", serviceHandler.BookService)
 			authRequired.GET("/services/my-bookings", serviceHandler.GetMyBookings)
+			authRequired.POST("/services/bookings/:id/status", serviceHandler.ProviderUpdateBookingStatus)
+			authRequired.POST("/services/listings", serviceHandler.CreateServiceListing)
+
+			// Taxi Operations
 			authRequired.POST("/taxi/location", taxiHandler.UpdateLocation)
 			authRequired.POST("/taxi/status", taxiHandler.UpdateStatus)
 			authRequired.POST("/taxi/request", taxiHandler.RequestRide)
-			authRequired.GET("/taxi/nearby", taxiHandler.GetNearbyDrivers)
+
+			// Property Bookings
 			authRequired.POST("/properties/book", propertyHandler.BookProperty)
 			authRequired.POST("/properties/listings", propertyHandler.CreatePropertyListing)
+
+			// C2C Actions
 			authRequired.POST("/c2c/listings", c2cHandler.CreateC2CListing)
+
+			// Review Management
 			authRequired.POST("/reviews", reviewHandler.CreateReview)
-			authRequired.GET("/wallet/balance", userHandler.GetWalletBalance)
+
+			// Finance & Utilities
+			authRequired.GET("/wallet/balance", payHandler.GetWalletBalance)
+			authRequired.GET("/bills", billsHandler.ListUserBills)
+			
+			// B2B Marketplace
+			authRequired.GET("/b2b/dashboard", b2bHandler.GetB2BDashboard)
+			authRequired.GET("/b2b/items", b2bHandler.ListWholesaleItems)
+			authRequired.GET("/b2b/items/:id", b2bHandler.GetWholesaleItem)
+			authRequired.POST("/b2b/rfqs", b2bHandler.CreateRFQ)
+			authRequired.GET("/b2b/rfqs", b2bHandler.ListMyRFQs)
+			authRequired.POST("/b2b/quotes", b2bHandler.SubmitQuote)
+
+			// Communication
 			authRequired.GET("/messages", userHandler.ListMessages)
 			authRequired.GET("/notifications", userHandler.ListNotifications)
-			authRequired.GET("/bills", userHandler.ListBills)
 		}
 	}
 

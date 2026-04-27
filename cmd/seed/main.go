@@ -120,7 +120,7 @@ func main() {
 	}
 
 	// 4. Assign Executive Admin Role
-	err = queries.AssignRoleToUser(ctx, db.AssignRoleToUserParams{
+	_, err = queries.AssignRoleToUser(ctx, db.AssignRoleToUserParams{
 		UserID: dbUser.ID,
 		Role:   db.UserRoleTypeExecutiveAdmin,
 	})
@@ -182,8 +182,8 @@ func main() {
 			businessIDs[bt.mtype] = biz.ID
 			// Set as approved
 			_, _ = queries.UpdateBusinessStatus(ctx, db.UpdateBusinessStatusParams{
-				ID:     biz.ID,
-				Status: db.NullBusinessVerificationStatus{BusinessVerificationStatus: db.BusinessVerificationStatusApproved, Valid: true},
+				ID:                 biz.ID,
+				VerificationStatus: db.NullBusinessVerificationStatus{BusinessVerificationStatus: db.BusinessVerificationStatusApproved, Valid: true},
 			})
 		}
 	}

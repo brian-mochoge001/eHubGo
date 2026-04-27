@@ -62,7 +62,7 @@ func (h *BusinessHandler) RegisterBusiness(c *gin.Context) {
 		}
 
 		// 2. Ensure user has 'vendor' role
-		_ = qtx.AssignRoleToUser(c.Request.Context(), db.AssignRoleToUserParams{
+		_, _ = qtx.AssignRoleToUser(c.Request.Context(), db.AssignRoleToUserParams{
 			UserID: userID,
 			Role:   db.UserRoleTypeVendor,
 		})

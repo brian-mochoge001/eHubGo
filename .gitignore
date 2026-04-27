@@ -7,3 +7,6 @@ ehubgo.exe
 ehubgo.exe~
 main.exe
 *.exe
+vendor/
+seed.exe
+seed

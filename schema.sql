@@ -129,6 +129,13 @@ CREATE TABLE businesses (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Business Locations (Multiple branches/warehouses)
+CREATE TABLE business_locations (
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    address_id TEXT NOT NULL REFERENCES addresses(id) ON DELETE CASCADE,
+    PRIMARY KEY (business_id, address_id)
+);
+
 -- Vendor Documents for Verification (Linked to Business)
 CREATE TABLE vendor_documents (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -289,6 +296,24 @@ CREATE TABLE pharmacy_items (
     stock_quantity INTEGER NOT NULL DEFAULT 0,
     category TEXT,
     is_available BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Wholesale Items (B2B - Linked to Business)
+CREATE TABLE wholesale_items (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    description TEXT,
+    image_urls TEXT[],
+    unit_price NUMERIC(10, 2),
+    bulk_price NUMERIC(10, 2),
+    bulk_quantity INTEGER,
+    category TEXT,
+    is_available BOOLEAN DEFAULT TRUE,
+    rating NUMERIC(2, 1) DEFAULT 0.0,
+    review_count INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -602,11 +627,13 @@ CREATE INDEX idx_products_search ON products USING GIN (to_tsvector('english', n
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE businesses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE business_locations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE food_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE grocery_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE liquor_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pharmacy_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wholesale_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bus_routes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE movies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE movie_showtimes ENABLE ROW LEVEL SECURITY;
@@ -626,11 +653,13 @@ ALTER TABLE property_bookings ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE users FORCE ROW LEVEL SECURITY;
 ALTER TABLE businesses FORCE ROW LEVEL SECURITY;
+ALTER TABLE business_locations FORCE ROW LEVEL SECURITY;
 ALTER TABLE products FORCE ROW LEVEL SECURITY;
 ALTER TABLE food_items FORCE ROW LEVEL SECURITY;
 ALTER TABLE grocery_items FORCE ROW LEVEL SECURITY;
 ALTER TABLE liquor_items FORCE ROW LEVEL SECURITY;
 ALTER TABLE pharmacy_items FORCE ROW LEVEL SECURITY;
+ALTER TABLE wholesale_items FORCE ROW LEVEL SECURITY;
 ALTER TABLE bus_routes FORCE ROW LEVEL SECURITY;
 ALTER TABLE movies FORCE ROW LEVEL SECURITY;
 ALTER TABLE movie_showtimes FORCE ROW LEVEL SECURITY;
@@ -659,6 +688,9 @@ CREATE POLICY businesses_view_policy ON businesses
 CREATE POLICY businesses_manage_policy ON businesses
     FOR ALL USING (owner_id = get_app_user_id() OR has_role('admin'));
 
+CREATE POLICY business_locations_policy ON business_locations
+    FOR ALL USING (business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff') OR has_role('admin'));
+
 -- 3. PRODUCTS/SERVICES/PROPERTIES Policy
 CREATE POLICY products_manage_policy ON products
     FOR ALL USING (
@@ -676,6 +708,11 @@ CREATE POLICY liquor_manage_policy ON liquor_items
     );
 
 CREATE POLICY pharmacy_manage_policy ON pharmacy_items
+    FOR ALL USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
+    );
+
+CREATE POLICY wholesale_manage_policy ON wholesale_items
     FOR ALL USING (
         business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')
     );
@@ -754,3 +791,54 @@ CREATE POLICY bills_access_policy ON bills USING (user_id = get_app_user_id() OR
 CREATE POLICY messages_access_policy ON messages USING (sender_id = get_app_user_id() OR receiver_id = get_app_user_id());
 
 CREATE POLICY notifications_access_policy ON notifications USING (user_id = get_app_user_id());
+
+-- B2B / Wholesale Extensions
+CREATE TABLE rfqs (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    buyer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'responded', 'converted', 'closed'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE rfq_items (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    rfq_id TEXT NOT NULL REFERENCES rfqs(id) ON DELETE CASCADE,
+    product_id TEXT REFERENCES products(id) ON DELETE SET NULL,
+    item_name TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit TEXT,
+    target_price NUMERIC(10, 2)
+);
+
+CREATE TABLE b2b_quotes (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    rfq_id TEXT NOT NULL REFERENCES rfqs(id) ON DELETE CASCADE,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    total_amount NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    valid_until TIMESTAMP WITH TIME ZONE,
+    status TEXT NOT NULL DEFAULT 'offered', -- 'offered', 'accepted', 'declined'
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE rfqs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rfq_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE b2b_quotes ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE rfqs FORCE ROW LEVEL SECURITY;
+ALTER TABLE rfq_items FORCE ROW LEVEL SECURITY;
+ALTER TABLE b2b_quotes FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY rfqs_access_policy ON rfqs
+    USING (buyer_id = get_app_user_id() OR business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff'));
+
+CREATE POLICY rfq_items_access_policy ON rfq_items
+    USING (rfq_id IN (SELECT id FROM rfqs WHERE buyer_id = get_app_user_id() OR business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')));
+
+CREATE POLICY b2b_quotes_access_policy ON b2b_quotes
+    USING (business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR rfq_id IN (SELECT id FROM rfqs WHERE buyer_id = get_app_user_id()) OR has_role('staff'));

@@ -64,69 +64,6 @@ func ToProductDTO(p db.Product) ProductDTO {
 	}
 }
 
-func ToProductDTOFromFeatured(p db.GetFeaturedProductsRow) ProductDTO {
-	return ProductDTO{
-		ID:                 p.ID,
-		BusinessID:         p.BusinessID,
-		Name:               p.Name,
-		Description:        NullStringToString(p.Description),
-		Price:              p.Price,
-		Currency:           p.Currency,
-		StockQuantity:      p.StockQuantity,
-		CategoryID:         NullStringToString(p.CategoryID),
-		BrandID:            NullStringToString(p.BrandID),
-		ImageUrls:          p.ImageUrls,
-		Rating:             NullStringToString(p.Rating),
-		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
-		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
-		DiscountPercentage: NullStringToString(p.DiscountPercentage),
-		CreatedAt:          NullTimeToTime(p.CreatedAt),
-		UpdatedAt:          NullTimeToTime(p.UpdatedAt),
-	}
-}
-
-func ToProductDTOFromDetails(p db.GetProductByIDWithDetailsRow) ProductDTO {
-	return ProductDTO{
-		ID:                 p.ID,
-		BusinessID:         p.BusinessID,
-		Name:               p.Name,
-		Description:        NullStringToString(p.Description),
-		Price:              p.Price,
-		Currency:           p.Currency,
-		StockQuantity:      p.StockQuantity,
-		CategoryID:         NullStringToString(p.CategoryID),
-		BrandID:            NullStringToString(p.BrandID),
-		ImageUrls:          p.ImageUrls,
-		Rating:             NullStringToString(p.Rating),
-		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
-		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
-		DiscountPercentage: NullStringToString(p.DiscountPercentage),
-		CreatedAt:          NullTimeToTime(p.CreatedAt),
-		UpdatedAt:          NullTimeToTime(p.UpdatedAt),
-	}
-}
-
-func ToProductDTOFromGetProducts(p db.GetProductsRow) ProductDTO {
-	return ProductDTO{
-		ID:                 p.ID,
-		BusinessID:         p.BusinessID,
-		Name:               p.Name,
-		Description:        NullStringToString(p.Description),
-		Price:              p.Price,
-		Currency:           p.Currency,
-		StockQuantity:      p.StockQuantity,
-		CategoryID:         NullStringToString(p.CategoryID),
-		BrandID:            NullStringToString(p.BrandID),
-		ImageUrls:          p.ImageUrls,
-		Rating:             NullStringToString(p.Rating),
-		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
-		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
-		DiscountPercentage: NullStringToString(p.DiscountPercentage),
-		CreatedAt:          NullTimeToTime(p.CreatedAt),
-		UpdatedAt:          NullTimeToTime(p.UpdatedAt),
-	}
-}
-
 // ListFeaturedProducts returns best-selling and verified products with pagination
 func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
@@ -138,8 +75,8 @@ func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		products, err := qtx.GetFeaturedProducts(c.Request.Context(), db.GetFeaturedProductsParams{
-			OffsetCount: int32(offset),
-			LimitCount:  int32(limit),
+			Offset: int32(offset),
+			Limit:  int32(limit),
 		})
 		if err != nil {
 			return err
@@ -147,7 +84,7 @@ func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 
 		dtoList := make([]ProductDTO, 0)
 		for _, p := range products {
-			dtoList = append(dtoList, ToProductDTOFromFeatured(p))
+			dtoList = append(dtoList, ToProductDTO(p))
 		}
 		c.JSON(http.StatusOK, dtoList)
 		return nil
@@ -402,8 +339,8 @@ func (h *EcommerceHandler) ListProducts(c *gin.Context) {
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		products, err := qtx.GetProducts(c.Request.Context(), db.GetProductsParams{
-			OffsetCount: int32(offset),
-			LimitCount:  int32(limit),
+			Offset: int32(offset),
+			Limit:  int32(limit),
 		})
 		if err != nil {
 			return err
@@ -411,7 +348,7 @@ func (h *EcommerceHandler) ListProducts(c *gin.Context) {
 
 		dtoList := make([]ProductDTO, 0)
 		for _, p := range products {
-			dtoList = append(dtoList, ToProductDTOFromGetProducts(p))
+			dtoList = append(dtoList, ToProductDTO(p))
 		}
 		c.JSON(http.StatusOK, dtoList)
 		return nil
@@ -433,7 +370,7 @@ func (h *EcommerceHandler) GetProductByID(c *gin.Context) {
 			return err
 		}
 
-		dto := ToProductDTOFromDetails(p)
+		dto := ToProductDTO(p)
 		c.JSON(http.StatusOK, dto)
 		return nil
 	})

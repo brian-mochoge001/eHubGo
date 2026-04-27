@@ -36,3 +36,19 @@ func NullTimeToTime(nt sql.NullTime) *time.Time {
 	}
 	return &nt.Time
 }
+
+// NullStringToStringPtr converts sql.NullString to *string for JSON
+func NullStringToStringPtr(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	return &ns.String
+}
+
+// NullTimeToTimePtr converts sql.NullTime to *time.Time for JSON
+func NullTimeToTimePtr(nt sql.NullTime) *time.Time {
+	if !nt.Valid {
+		return nil
+	}
+	return &nt.Time
+}
