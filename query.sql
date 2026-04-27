@@ -17,7 +17,7 @@ INSERT INTO user_roles (user_id, role) VALUES (@user_id, @role);
 -- name: GetUserRoles :many
 SELECT role FROM user_roles WHERE user_id = @user_id;
 
--- Businesses (The "Stalls")
+-- Businesses (The "Stalls" in the Mall)
 -- name: CreateBusiness :one
 INSERT INTO businesses (id, owner_id, name, description, logo_url, banner_url, miniservice_type, address_id, phone_number, email)
 VALUES (@id, @owner_id, @name, @description, @logo_url, @banner_url, @miniservice_type, @address_id, @phone_number, @email)
@@ -42,6 +42,12 @@ SELECT * FROM businesses WHERE miniservice_type = @miniservice_type AND verifica
 -- name: CreateProduct :one
 INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, is_flash_sale, discount_percentage, rating)
 VALUES (@id, @business_id, @name, @description, @price, @currency, @stock_quantity, @category_id, @brand_id, @is_flash_sale, @discount_percentage, @rating)
+RETURNING *;
+
+-- name: UpdateProduct :one
+UPDATE products
+SET name = @name, description = @description, price = @price, stock_quantity = @stock_quantity, category_id = @category_id, image_urls = @image_urls, updated_at = CURRENT_TIMESTAMP
+WHERE id = @id
 RETURNING *;
 
 -- name: GetProductsByBusiness :many
@@ -100,8 +106,8 @@ SET name = @name, logo_url = @logo_url, updated_at = CURRENT_TIMESTAMP
 WHERE id = @id
 RETURNING *;
 
--- name: DeleteBrand :exec
-DELETE FROM brands WHERE id = @id;
+-- name: DeleteProduct :exec
+DELETE FROM products WHERE id = @id;
 
 -- Product Variants
 -- name: CreateProductVariant :one
@@ -134,7 +140,7 @@ RETURNING *;
 SELECT * FROM product_discounts WHERE product_id = @product_id;
 
 -- name: GetProductDiscountByID :one
-SELECT * FROM product_discounts WHERE id = @id;
+SELECT * FROM product_discountS WHERE id = @id;
 
 -- name: UpdateProductDiscount :one
 UPDATE product_discounts
@@ -228,133 +234,6 @@ SELECT f.*, b.name as restaurant_name
 FROM food_items f
 JOIN businesses b ON f.business_id = b.id
 ORDER BY f.created_at DESC;
-
--- Drivers & Taxi
--- name: CreateDriver :one
-INSERT INTO drivers (id, user_id, name, status, vehicle_type_id)
-VALUES (@id, @user_id, @name, @status, @vehicle_type_id)
-RETURNING *;
-
--- name: UpdateDriverLocation :one
-UPDATE drivers
-SET last_location = ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography,
-    updated_at = CURRENT_TIMESTAMP
-WHERE user_id = @user_id
-RETURNING *;
-
--- name: UpdateDriverStatus :one
-UPDATE drivers
-SET status = @status, updated_at = CURRENT_TIMESTAMP
-WHERE user_id = @user_id
-RETURNING *;
-
--- name: GetNearbyDrivers :many
-SELECT d.*, 
-       ST_Distance(d.last_location, ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography) as distance_meters
-FROM drivers d
-WHERE d.status = 'online'
-  AND ST_DWithin(d.last_location, ST_SetSRID(ST_MakePoint(@lng, @lat), 4326)::geography, @radius)
-ORDER BY distance_meters ASC
-LIMIT @limit_count;
-
--- Hubs
--- name: GetHubs :many
-SELECT * FROM hubs;
-
--- name: CreateHub :one
-INSERT INTO hubs (id, name, description)
-VALUES (@id, @name, @description)
-RETURNING *;
-
--- Tasks
--- name: GetTasks :many
-SELECT * FROM tasks;
-
--- name: CreateTask :one
-INSERT INTO tasks (id, title, priority)
-VALUES (@id, @title, @priority)
-RETURNING *;
-
--- name: CreateTaxiTrip :one
-INSERT INTO taxi_trips (id, user_id, driver_id, pickup_location, dropoff_location, total_amount, currency, status)
-VALUES (@id, @user_id, @driver_id, ST_SetSRID(ST_MakePoint(@pickup_lng, @pickup_lat), 4326)::geography, ST_SetSRID(ST_MakePoint(@dropoff_lng, @dropoff_lat), 4326)::geography, @total_amount, @currency, 'requested')
-RETURNING *;
-
--- name: GetTaxiTripByID :one
-SELECT * FROM taxi_trips WHERE id = @id;
-
--- name: UpdateTaxiTripStatus :one
-UPDATE taxi_trips
-SET status = @status, 
-    accepted_at = CASE WHEN @status = 'accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END,
-    started_at = CASE WHEN @status = 'in_progress' THEN CURRENT_TIMESTAMP ELSE started_at END,
-    completed_at = CASE WHEN @status = 'completed' THEN CURRENT_TIMESTAMP ELSE completed_at END,
-    updated_at = CURRENT_TIMESTAMP
-WHERE id = @id
-RETURNING *;
-
--- Cart & Orders
--- name: AddItemToCart :one
-INSERT INTO cart_items (id, user_id, business_id, item_id, item_type, quantity)
-VALUES (@id, @user_id, @business_id, @item_id, @item_type, @quantity)
-ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
-  quantity = cart_items.quantity + EXCLUDED.quantity,
-  updated_at = CURRENT_TIMESTAMP
-RETURNING *;
-
--- name: GetCartItemsByUserID :many
-SELECT id, user_id, business_id, item_id, item_type, quantity, created_at, updated_at FROM cart_items WHERE user_id = @user_id ORDER BY created_at DESC;
-
--- name: UpdateCartItemQuantity :exec
-UPDATE cart_items SET quantity = @quantity, updated_at = CURRENT_TIMESTAMP WHERE id = @id;
-
--- name: RemoveCartItem :exec
-DELETE FROM cart_items WHERE id = @id;
-
--- name: ClearCart :exec
-DELETE FROM cart_items WHERE user_id = @user_id;
-
--- name: CreateOrder :one
-INSERT INTO orders (id, user_id, total_amount, currency, status, shipping_address_id)
-VALUES (@id, @user_id, @total_amount, @currency, @status, @shipping_address_id)
-RETURNING *;
-
--- name: GetOrdersByUserID :many
-SELECT * FROM orders WHERE user_id = @user_id ORDER BY created_at DESC;
-
--- name: CreateOrderItem :one
-INSERT INTO order_items (id, order_id, business_id, item_id, item_type, quantity, unit_price)
-VALUES (@id, @order_id, @business_id, @item_id, @item_type, @quantity, @unit_price)
-RETURNING *;
-
--- C2C Marketplace
--- name: CreateC2CSeller :one
-INSERT INTO c2c_sellers (id, user_id, bio, avatar_url)
-VALUES (@id, @user_id, @bio, @avatar_url)
-RETURNING *;
-
--- name: GetC2CSellerByUserID :one
-SELECT * FROM c2c_sellers WHERE user_id = @user_id;
-
--- name: CreateC2CListing :one
-INSERT INTO c2c_listings (id, seller_id, title, description, price, currency, image_urls, is_negotiable, location, condition, status)
-VALUES (@id, @seller_id, @title, @description, @price, @currency, @image_urls, @is_negotiable, @location, @condition, @status)
-RETURNING *;
-
--- name: GetC2CListingByID :one
-SELECT * FROM c2c_listings WHERE id = @id;
-
--- name: ListC2CListings :many
-SELECT * FROM c2c_listings WHERE status = 'available' ORDER BY created_at DESC;
-
--- Reviews
--- name: AddReview :one
-INSERT INTO reviews (id, target_id, target_type, user_id, rating, comment)
-VALUES (@id, @target_id, @target_type, @user_id, @rating, @comment)
-RETURNING *;
-
--- name: GetReviewsByTarget :many
-SELECT * FROM reviews WHERE target_id = @target_id AND target_type = @target_type ORDER BY created_at DESC;
 
 -- Grocery Items
 -- name: CreateGroceryItem :one

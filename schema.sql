@@ -163,6 +163,7 @@ CREATE TABLE products (
     stock_quantity INTEGER NOT NULL DEFAULT 0,
     category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
     brand_id TEXT REFERENCES brands(id) ON DELETE SET NULL,
+    image_urls TEXT[],
     rating NUMERIC(2, 1) DEFAULT 0.0,
     review_count INTEGER DEFAULT 0,
     is_flash_sale BOOLEAN DEFAULT FALSE,

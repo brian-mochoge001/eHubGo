@@ -34,6 +34,7 @@ type ProductDTO struct {
 	StockQuantity      int32      `json:"stock_quantity"`
 	CategoryID         *string    `json:"category_id"`
 	BrandID            *string    `json:"brand_id"`
+	ImageUrls          []string   `json:"image_urls"`
 	Rating             *string    `json:"rating"`
 	ReviewCount        *int32     `json:"review_count"`
 	IsFlashSale        *bool      `json:"is_flash_sale"`
@@ -53,6 +54,7 @@ func ToProductDTO(p db.Product) ProductDTO {
 		StockQuantity:      p.StockQuantity,
 		CategoryID:         NullStringToString(p.CategoryID),
 		BrandID:            NullStringToString(p.BrandID),
+		ImageUrls:          p.ImageUrls,
 		Rating:             NullStringToString(p.Rating),
 		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
 		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
@@ -73,6 +75,7 @@ func ToProductDTOFromFeatured(p db.GetFeaturedProductsRow) ProductDTO {
 		StockQuantity:      p.StockQuantity,
 		CategoryID:         NullStringToString(p.CategoryID),
 		BrandID:            NullStringToString(p.BrandID),
+		ImageUrls:          p.ImageUrls,
 		Rating:             NullStringToString(p.Rating),
 		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
 		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
@@ -93,6 +96,7 @@ func ToProductDTOFromDetails(p db.GetProductByIDWithDetailsRow) ProductDTO {
 		StockQuantity:      p.StockQuantity,
 		CategoryID:         NullStringToString(p.CategoryID),
 		BrandID:            NullStringToString(p.BrandID),
+		ImageUrls:          p.ImageUrls,
 		Rating:             NullStringToString(p.Rating),
 		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
 		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
@@ -113,6 +117,7 @@ func ToProductDTOFromGetProducts(p db.GetProductsRow) ProductDTO {
 		StockQuantity:      p.StockQuantity,
 		CategoryID:         NullStringToString(p.CategoryID),
 		BrandID:            NullStringToString(p.BrandID),
+		ImageUrls:          p.ImageUrls,
 		Rating:             NullStringToString(p.Rating),
 		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
 		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
@@ -464,29 +469,17 @@ func (h *EcommerceHandler) ListCategories(c *gin.Context) {
 	}
 }
 
-// ListFlashSaleProducts returns flash sale products with pagination
-func (h *EcommerceHandler) ListFlashSaleProducts(c *gin.Context) {
-	limitStr := c.DefaultQuery("limit", "10")
-	offsetStr := c.DefaultQuery("offset", "0")
-	
-	limit, _ := strconv.Atoi(limitStr)
-	offset, _ := strconv.Atoi(offsetStr)
+// DeleteProduct removes a product from the database
+func (h *EcommerceHandler) DeleteProduct(c *gin.Context) {
+	id := c.Param("id")
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		products, err := qtx.GetFlashSaleProducts(c.Request.Context(), db.GetFlashSaleProductsParams{
-			OffsetCount: int32(offset),
-			LimitCount:  int32(limit),
-		})
+		err := qtx.DeleteProduct(c.Request.Context(), id)
 		if err != nil {
 			return err
 		}
-
-		dtoList := make([]ProductDTO, 0)
-		for _, p := range products {
-			dtoList = append(dtoList, ToProductDTO(p))
-		}
-		c.JSON(http.StatusOK, dtoList)
+		c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
 		return nil
 	})
 
