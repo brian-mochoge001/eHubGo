@@ -35,3 +35,21 @@ func (h *JobsHandler) ListJobs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 }
+
+func (h *JobsHandler) GetCompanyProfile(c *gin.Context) {
+	businessID := c.Param("business_id")
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		company, err := qtx.GetBusinessByID(c.Request.Context(), businessID)
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, company)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Company not found"})
+	}
+}

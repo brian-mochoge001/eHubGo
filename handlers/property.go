@@ -154,7 +154,6 @@ func (h *PropertyHandler) BookProperty(c *gin.Context) {
 			CheckOutDate: req.CheckOutDate,
 			TotalAmount: prop.PricePerNight, // Placeholder calculation
 			Currency:    prop.Currency,
-			Status:      "pending",
 		})
 		if err != nil {
 			return err

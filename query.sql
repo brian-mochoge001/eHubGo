@@ -13,13 +13,16 @@ VALUES (@id, @seller_id, @title, @description, @price, @currency, @image_urls, @
 RETURNING *;
 
 -- name: GetC2CListingByID :one
-SELECT * FROM c2c_listings WHERE id = @id;
+SELECT * FROM c2c_listings WHERE id = $1;
 
 -- name: ListC2CListings :many
 SELECT c.*, s.user_id as seller_user_id, s.avatar_url as seller_avatar_url
 FROM c2c_listings c
 JOIN c2c_sellers s ON c.seller_id = s.id
 WHERE c.status = 'available' ORDER BY c.created_at DESC;
+
+-- name: CountSellerListings :one
+SELECT COUNT(*) FROM c2c_listings WHERE seller_id = $1;
 
 -- Business
 -- name: CreateBusiness :one
@@ -73,6 +76,15 @@ WHERE g.is_available = TRUE;
 -- name: ListGroceryItemsByBusiness :many
 SELECT * FROM grocery_items WHERE business_id = $1 AND is_available = TRUE;
 
+-- name: SearchGroceryStoresByLocation :many
+SELECT DISTINCT b.*, a.city, a.address_line1, ST_Distance(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326), ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+FROM businesses b
+JOIN addresses a ON b.address_id = a.id
+WHERE b.miniservice_type = 'grocery' 
+AND b.verification_status = 'approved'
+AND ST_DWithin(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326), ST_SetSRID(ST_MakePoint($1, $2), 4326), $3)
+ORDER BY distance;
+
 -- Liquor
 -- name: ListLiquorItems :many
 SELECT l.*, b.name as business_name
@@ -83,12 +95,33 @@ WHERE l.is_available = TRUE;
 -- name: ListLiquorItemsByBusiness :many
 SELECT * FROM liquor_items WHERE business_id = $1 AND is_available = TRUE;
 
--- Pharmacy
+-- Health
+-- name: CreateDoctor :one
+INSERT INTO doctors (id, user_id, specialty, bio, license_number)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: ListDoctors :many
+SELECT d.*, u.first_name, u.last_name, b.name as center_name
+FROM doctors d
+JOIN users u ON d.user_id = u.id
+LEFT JOIN businesses b ON d.business_id = b.id;
+
+-- name: CreateAppointment :one
+INSERT INTO appointments (id, patient_id, doctor_id, appointment_time, notes)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: ListAppointmentsByPatient :many
+SELECT a.*, d.specialty, u.first_name, u.last_name
+FROM appointments a
+JOIN doctors d ON a.doctor_id = d.id
+JOIN users u ON d.user_id = u.id
+WHERE a.patient_id = $1 ORDER BY a.appointment_time ASC;
+
+-- Pharmacy Items (Already exists, ensures prescription check is respected for OTC)
 -- name: ListPharmacyItems :many
-SELECT p.*, b.name as business_name
-FROM pharmacy_items p
-JOIN businesses b ON p.business_id = b.id
-WHERE p.is_available = TRUE;
+SELECT * FROM pharmacy_items WHERE is_available = TRUE;
 
 -- name: ListPharmacyItemsByBusiness :many
 SELECT * FROM pharmacy_items WHERE business_id = $1 AND is_available = TRUE;
@@ -115,12 +148,20 @@ JOIN businesses b ON f.business_id = b.id
 LEFT JOIN categories c ON f.category_id = c.id
 WHERE f.id = $1;
 
--- Bus
+-- Travel
 -- name: ListBusRoutes :many
 SELECT r.*, b.name as business_name
 FROM bus_routes r
 JOIN businesses b ON r.business_id = b.id
-ORDER BY departure_time ASC;
+WHERE (sqlc.narg('origin')::text IS NULL OR r.origin ILIKE '%' || sqlc.narg('origin') || '%')
+AND (sqlc.narg('destination')::text IS NULL OR r.destination ILIKE '%' || sqlc.narg('destination') || '%')
+AND r.departure_time >= CURRENT_TIMESTAMP
+ORDER BY r.departure_time ASC;
+
+-- name: CreateBusTicket :one
+INSERT INTO tickets (id, user_id, showtime_id, seat_number, ticket_number, qr_code_data, total_amount, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'booked')
+RETURNING *;
 
 -- Cinema
 -- name: ListNowPlayingMovies :many
@@ -131,6 +172,13 @@ SELECT * FROM movies WHERE is_now_playing = FALSE ORDER BY release_date ASC;
 
 -- name: GetMovieDetails :one
 SELECT * FROM movies WHERE id = $1;
+
+-- name: ListMovieShowtimes :many
+SELECT ms.*, b.name as cinema_name
+FROM movie_showtimes ms
+JOIN businesses b ON ms.business_id = b.id
+WHERE ms.movie_id = $1 AND ms.show_time >= CURRENT_TIMESTAMP
+ORDER BY ms.show_time ASC;
 
 -- name: ListRefreshmentsByCinema :many
 SELECT * FROM refreshments WHERE business_id = $1;
@@ -143,6 +191,11 @@ RETURNING *;
 -- Flights
 -- name: ListFlights :many
 SELECT * FROM flights WHERE departure_time > CURRENT_TIMESTAMP ORDER BY departure_time ASC;
+
+-- name: CreateFlightTicket :one
+INSERT INTO tickets (id, user_id, showtime_id, seat_number, ticket_number, qr_code_data, total_amount, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'booked')
+RETURNING *;
 
 -- Jobs
 -- name: ListActiveJobs :many

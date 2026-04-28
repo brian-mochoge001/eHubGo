@@ -20,6 +20,37 @@ func NewGroceryHandler(queries *db.Queries, dbConn *sql.DB) *GroceryHandler {
 	}
 }
 
+func (h *GroceryHandler) SearchGroceryStores(c *gin.Context) {
+	var params struct {
+		Longitude float64 `form:"longitude" binding:"required"`
+		Latitude  float64 `form:"latitude" binding:"required"`
+		Radius    float64 `form:"radius,default=5000"` // default 5km
+	}
+
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		stores, err := qtx.SearchGroceryStoresByLocation(c.Request.Context(), db.SearchGroceryStoresByLocationParams{
+			StMakepoint:   params.Longitude,
+			StMakepoint_2: params.Latitude,
+			StDwithin:     params.Radius,
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, stores)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
 func (h *GroceryHandler) CalculateGroceryDeliveryQuote(c *gin.Context) {
 	var req struct {
 		Distance   float64 `json:"distance" binding:"required"`

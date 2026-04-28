@@ -202,6 +202,15 @@ func (h *C2CHandler) CreateC2CListing(c *gin.Context) {
 			}
 		}
 
+		// Check listing limit (5)
+		count, err := qtx.CountSellerListings(c.Request.Context(), seller.ID)
+		if err != nil {
+			return fmt.Errorf("failed to count listings: %w", err)
+		}
+		if count >= 5 {
+			return fmt.Errorf("you have reached the limit of 5 listings")
+		}
+
 		// 2. Create listing
 		listingID := uuid.New().String()
 		listing, err := qtx.CreateC2CListing(c.Request.Context(), db.CreateC2CListingParams{
@@ -220,6 +229,7 @@ func (h *C2CHandler) CreateC2CListing(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+
 
 		c.JSON(http.StatusCreated, listing)
 		return nil

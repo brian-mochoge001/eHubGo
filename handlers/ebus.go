@@ -23,7 +23,7 @@ func NewBusHandler(queries *db.Queries, dbConn *sql.DB) *BusHandler {
 func (h *BusHandler) ListBusRoutes(c *gin.Context) {
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		routes, err := qtx.ListBusRoutes(c.Request.Context())
+		routes, err := qtx.ListBusRoutes(c.Request.Context(), db.ListBusRoutesParams{})
 		if err != nil {
 			return err
 		}

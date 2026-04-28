@@ -72,6 +72,23 @@ func (h *CinemaHandler) GetMovieDetails(c *gin.Context) {
 	}
 }
 
+func (h *CinemaHandler) ListMovieShowtimes(c *gin.Context) {
+	movieID := c.Param("id")
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		showtimes, err := qtx.ListMovieShowtimes(c.Request.Context(), movieID)
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, showtimes)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
 func (h *CinemaHandler) ListRefreshments(c *gin.Context) {
 	businessID := c.Query("business_id")
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {

@@ -423,6 +423,7 @@ CREATE TABLE jobs (
     business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     description TEXT,
+    requirements TEXT,
     category TEXT,
     job_type TEXT, -- 'Full-time', 'Contract', 'Part-time'
     location TEXT,
@@ -871,3 +872,8 @@ CREATE POLICY rfq_items_access_policy ON rfq_items
 
 CREATE POLICY b2b_quotes_access_policy ON b2b_quotes
     USING (business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR rfq_id IN (SELECT id FROM rfqs WHERE buyer_id = get_app_user_id()) OR has_role('staff'));
+
+-- Health Extensions
+CREATE TABLE doctors (id TEXT PRIMARY KEY DEFAULT gen_random_uuid(), user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE, specialty TEXT NOT NULL, bio TEXT, license_number TEXT UNIQUE NOT NULL, rating NUMERIC(2,1) DEFAULT 0.0, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
+
+CREATE TABLE appointments (id TEXT PRIMARY KEY DEFAULT gen_random_uuid(), patient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, doctor_id TEXT NOT NULL REFERENCES doctors(id) ON DELETE CASCADE, appointment_time TIMESTAMP WITH TIME ZONE NOT NULL, status TEXT DEFAULT 'scheduled', notes TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);
