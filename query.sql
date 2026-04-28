@@ -95,10 +95,25 @@ SELECT * FROM pharmacy_items WHERE business_id = $1 AND is_available = TRUE;
 
 -- Food
 -- name: ListAllFoodItems :many
-SELECT f.*, b.name as restaurant_name
+SELECT f.*, b.name as restaurant_name, c.name as category_name
 FROM food_items f
 JOIN businesses b ON f.business_id = b.id
+LEFT JOIN categories c ON f.category_id = c.id
 WHERE f.is_available = TRUE;
+
+-- name: ListFoodItemsByCategory :many
+SELECT f.*, b.name as restaurant_name, c.name as category_name
+FROM food_items f
+JOIN businesses b ON f.business_id = b.id
+JOIN categories c ON f.category_id = c.id
+WHERE c.name = $1 AND f.is_available = TRUE;
+
+-- name: GetFoodItemByID :one
+SELECT f.*, b.name as restaurant_name, c.name as category_name
+FROM food_items f
+JOIN businesses b ON f.business_id = b.id
+LEFT JOIN categories c ON f.category_id = c.id
+WHERE f.id = $1;
 
 -- Bus
 -- name: ListBusRoutes :many
@@ -114,11 +129,16 @@ SELECT * FROM movies WHERE is_now_playing = TRUE ORDER BY release_date DESC;
 -- name: ListComingSoonMovies :many
 SELECT * FROM movies WHERE is_now_playing = FALSE ORDER BY release_date ASC;
 
--- name: ListMovieShowtimesByMovie :many
-SELECT s.*, b.name as cinema_name
-FROM movie_showtimes s
-JOIN businesses b ON s.business_id = b.id
-WHERE s.movie_id = $1 ORDER BY show_time ASC;
+-- name: GetMovieDetails :one
+SELECT * FROM movies WHERE id = $1;
+
+-- name: ListRefreshmentsByCinema :many
+SELECT * FROM refreshments WHERE business_id = $1;
+
+-- name: CreateTicket :one
+INSERT INTO tickets (id, user_id, showtime_id, seat_number, ticket_number, qr_code_data, refreshment_ids, total_amount, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'booked')
+RETURNING *;
 
 -- Flights
 -- name: ListFlights :many
@@ -222,12 +242,22 @@ INSERT INTO taxi_trips (id, user_id, pickup_location, dropoff_location, total_am
 VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), ST_SetSRID(ST_MakePoint($5, $6), 4326), $7, $8)
 RETURNING *;
 
--- Properties
+-- Property
 -- name: ListProperties :many
-SELECT * FROM properties ORDER BY created_at DESC;
+SELECT p.*, b.name as business_name, a.city, a.address_line1
+FROM properties p
+JOIN businesses b ON p.business_id = b.id
+LEFT JOIN addresses a ON p.address_id = a.id
+WHERE (sqlc.narg('city')::text IS NULL OR a.city ILIKE '%' || sqlc.narg('city') || '%')
+AND (sqlc.narg('max_price')::numeric IS NULL OR p.price_per_night <= sqlc.narg('max_price'))
+AND (sqlc.narg('min_rooms')::int IS NULL OR p.number_of_bedrooms >= sqlc.narg('min_rooms'));
 
 -- name: GetPropertyByID :one
-SELECT * FROM properties WHERE id = $1;
+SELECT p.*, b.name as business_name, a.city, a.address_line1
+FROM properties p
+JOIN businesses b ON p.business_id = b.id
+LEFT JOIN addresses a ON p.address_id = a.id
+WHERE p.id = $1;
 
 -- name: CreateProperty :one
 INSERT INTO properties (id, business_id, title, description, address_id, price_per_night, currency, number_of_guests, number_of_bedrooms, type, image_urls)
@@ -236,7 +266,7 @@ RETURNING *;
 
 -- name: CreatePropertyBooking :one
 INSERT INTO property_bookings (id, user_id, property_id, check_in_date, check_out_date, total_amount, currency, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
 RETURNING *;
 
 -- name: SearchPropertiesByLocation :many
@@ -273,9 +303,21 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: CreateFoodItem :one
-INSERT INTO food_items (id, business_id, name, description, price, currency, image_url, is_available)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO food_items (id, business_id, category_id, name, description, price, currency, image_urls, is_available)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
+
+-- name: GetNearbyMotorbikeDrivers :many
+SELECT d.*, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+FROM drivers d
+JOIN vehicle_types vt ON d.vehicle_type_id = vt.id
+WHERE d.status = 'online' 
+AND vt.name = 'motorbike'
+AND ST_DWithin(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326), $3)
+ORDER BY distance LIMIT $4;
+
+-- name: AssignDriverToOrder :one
+UPDATE orders SET driver_id = $2, delivery_fee = $3, status = 'assigned', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *;
 
 -- name: CreateBusRoute :one
 INSERT INTO bus_routes (id, business_id, origin, destination, departure_time, arrival_time, price, currency, available_seats, bus_type)

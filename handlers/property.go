@@ -27,7 +27,7 @@ func NewPropertyHandler(queries *db.Queries, dbConn *sql.DB) *PropertyHandler {
 func (h *PropertyHandler) ListProperties(c *gin.Context) {
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		properties, err := qtx.ListProperties(c.Request.Context())
+		properties, err := qtx.ListProperties(c.Request.Context(), db.ListPropertiesParams{})
 		if err != nil {
 			return err
 		}

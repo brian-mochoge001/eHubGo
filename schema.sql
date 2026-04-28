@@ -238,11 +238,12 @@ CREATE TABLE property_bookings (
 CREATE TABLE food_items (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
     business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     description TEXT,
     price NUMERIC(10, 2) NOT NULL,
     currency TEXT NOT NULL DEFAULT 'Ksh',
-    image_url TEXT,
+    image_urls TEXT[],
     is_available BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -338,12 +339,38 @@ CREATE TABLE movies (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     description TEXT,
+    synopsis TEXT,
+    trailer_url TEXT,
     genre TEXT,
     rating NUMERIC(2, 1),
     duration_minutes INTEGER,
     poster_url TEXT,
     is_now_playing BOOLEAN DEFAULT FALSE,
+    is_3d BOOLEAN DEFAULT FALSE,
     release_date DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Refreshments
+CREATE TABLE refreshments (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    price NUMERIC(10, 2) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tickets
+CREATE TABLE tickets (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    showtime_id TEXT NOT NULL REFERENCES movie_showtimes(id) ON DELETE CASCADE,
+    seat_number TEXT NOT NULL,
+    ticket_number TEXT UNIQUE NOT NULL,
+    qr_code_data TEXT NOT NULL,
+    refreshment_ids TEXT[],
+    total_amount NUMERIC(10, 2) NOT NULL,
+    status TEXT NOT NULL DEFAULT 'booked',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -515,7 +542,9 @@ CREATE TABLE tasks (
 CREATE TABLE orders (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    driver_id TEXT REFERENCES drivers(id) ON DELETE SET NULL,
     total_amount NUMERIC(10, 2) NOT NULL,
+    delivery_fee NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     currency TEXT NOT NULL DEFAULT 'Ksh',
     status TEXT NOT NULL DEFAULT 'pending',
     shipping_address_id TEXT REFERENCES addresses(id) ON DELETE SET NULL,

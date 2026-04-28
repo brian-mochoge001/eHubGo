@@ -135,6 +135,7 @@ func main() {
 	reviewHandler := handlers.NewReviewHandler(queries, conn)
 	serviceHandler := handlers.NewServiceHandler(queries, conn)
 	propertyHandler := handlers.NewPropertyHandler(queries, conn)
+	hostHandler := handlers.NewHostHandler(queries, conn)
 	c2cHandler := handlers.NewC2CHandler(queries, conn)
 	taxiHandler := handlers.NewTaxiHandler(queries, conn)
 	
@@ -155,6 +156,7 @@ func main() {
 	payHandler := handlers.NewPayHandler(queries, conn)
 	b2bHandler := handlers.NewB2BHandler(queries, conn)
 	deliveryHandler := handlers.NewDeliveryHandler(queries, conn)
+	pricingHandler := handlers.NewPricingHandler(queries, conn)
 
 	var opts []option.ClientOption
 	if serviceAccountJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT_JSON"); serviceAccountJSON != "" {
@@ -200,9 +202,17 @@ func main() {
 		
 		// Specialized Stores
 		api.GET("/groceries", groceryHandler.ListGroceryItems)
+		api.POST("/groceries/delivery/estimate", groceryHandler.CalculateGroceryDeliveryQuote)
 		api.GET("/liquor", liquorHandler.ListLiquorItems)
 		api.GET("/pharmacy", healthHandler.ListPharmacyItems)
-		api.GET("/food-items/all", foodHandler.ListAllFoodItems)
+		api.GET("/food-items", foodHandler.ListAllFoodItems)
+		api.GET("/food-items/:id", foodHandler.GetFoodItem)
+		api.GET("/food-items/category", foodHandler.ListFoodByCategory)
+		
+		// Delivery Services
+		api.GET("/delivery/drivers/nearby", foodHandler.GetNearbyMotorbikeDrivers)
+		api.POST("/delivery/pricing/estimate", deliveryHandler.CalculateDeliveryQuote)
+		api.POST("/pricing/estimate", pricingHandler.GetPriceEstimate)
 		
 		// Services (Generic Listing)
 		api.GET("/services/laundry", laundryHandler.ListLaundryServices)
@@ -219,13 +229,14 @@ func main() {
 		api.GET("/drivers/nearby", taxiHandler.GetNearbyDrivers)
 		
 		// Accomodation
-		api.GET("/properties", propertyHandler.ListProperties)
-		api.GET("/properties/search", propertyHandler.SearchProperties)
-		api.GET("/properties/:id", propertyHandler.GetProperty)
+		api.GET("/properties", hostHandler.ListProperties)
+		api.GET("/properties/:id", hostHandler.GetProperty)
 		
 		// Entertainment & Jobs
 		api.GET("/cinema/movies/now-playing", cinemaHandler.ListNowPlayingMovies)
 		api.GET("/cinema/movies/coming-soon", cinemaHandler.ListComingSoonMovies)
+		api.GET("/cinema/movies/:id", cinemaHandler.GetMovieDetails)
+		api.GET("/cinema/refreshments", cinemaHandler.ListRefreshments)
 		api.GET("/cinema/movies/:id/showtimes", cinemaHandler.ListMovieShowtimes)
 		api.GET("/jobs", jobsHandler.ListJobs)
 		
@@ -294,6 +305,7 @@ func main() {
 			authRequired.POST("/taxi/location", taxiHandler.UpdateLocation)
 			authRequired.POST("/taxi/status", taxiHandler.UpdateStatus)
 			authRequired.POST("/taxi/request", taxiHandler.RequestRide)
+			authRequired.POST("/food/delivery/assign", foodHandler.AssignDelivery)
 
 			// Property Bookings
 			authRequired.POST("/properties/book", propertyHandler.BookProperty)
