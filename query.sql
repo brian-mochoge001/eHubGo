@@ -234,10 +234,20 @@ SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC;
 
 -- Products (Ecommerce)
 -- name: GetProducts :many
-SELECT * FROM products ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+ORDER BY p.created_at DESC LIMIT $1 OFFSET $2;
 
 -- name: GetProductByIDWithDetails :one
-SELECT * FROM products WHERE id = $1;
+SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.id = $1;
 
 -- name: GetFeaturedProducts :many
 SELECT * FROM products WHERE rating >= 4.0 ORDER BY review_count DESC LIMIT $1 OFFSET $2;
@@ -245,105 +255,71 @@ SELECT * FROM products WHERE rating >= 4.0 ORDER BY review_count DESC LIMIT $1 O
 -- name: GetCategories :many
 SELECT * FROM categories ORDER BY name ASC;
 
--- name: CreateOrder :one
-INSERT INTO orders (id, user_id, total_amount, currency, status, shipping_address_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+-- name: CreateCategory :one
+INSERT INTO categories (id, name, description, image_url, parent_id)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
--- name: CreateOrderItem :one
-INSERT INTO order_items (id, order_id, business_id, item_id, item_type, quantity, unit_price)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+-- name: UpdateCategory :one
+UPDATE categories SET name = $2, description = $3, image_url = $4, parent_id = $5, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 RETURNING *;
+
+-- name: DeleteCategory :exec
+DELETE FROM categories WHERE id = $1;
+
+-- name: GetBrands :many
+SELECT b.*, c.name as category_name 
+FROM brands b
+LEFT JOIN categories c ON b.category_id = c.id
+ORDER BY b.name ASC;
+
+-- name: ListBrandsByCategory :many
+SELECT * FROM brands WHERE category_id = $1 ORDER BY name ASC;
+
+-- name: CreateBrand :one
+INSERT INTO brands (id, name, logo_url, category_id)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
--- name: GetOrdersByUserID :many
-SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC;
+-- name: UpdateBrand :one
+UPDATE brands SET name = $2, logo_url = $3, category_id = $4, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 RETURNING *;
 
--- Cart
--- name: GetCartItemsByUserID :many
-SELECT * FROM cart_items WHERE user_id = $1;
+-- name: DeleteBrand :exec
+DELETE FROM brands WHERE id = $1;
 
--- name: AddItemToCart :one
-INSERT INTO cart_items (id, user_id, business_id, item_id, item_type, quantity)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET quantity = cart_items.quantity + $6
+-- name: ListProductModels :many
+SELECT m.*, b.name as brand_name
+FROM product_models m
+JOIN brands b ON m.brand_id = b.id
+ORDER BY m.name ASC;
+
+-- name: ListModelsByBrand :many
+SELECT * FROM product_models WHERE brand_id = $1 ORDER BY name ASC;
+
+-- name: CreateProductModel :one
+INSERT INTO product_models (id, brand_id, name, image_url)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
--- name: UpdateCartItemQuantity :exec
-UPDATE cart_items SET quantity = $2 WHERE id = $1;
+-- name: UpdateProductModel :one
+UPDATE product_models SET brand_id = $2, name = $3, image_url = $4, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 RETURNING *;
 
--- name: RemoveCartItem :exec
-DELETE FROM cart_items WHERE id = $1;
-
--- name: ClearCart :exec
-DELETE FROM cart_items WHERE user_id = $1;
-
--- Taxi
--- name: UpdateDriverLocation :one
-UPDATE drivers SET last_location = ST_SetSRID(ST_MakePoint($2, $3), 4326), updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING *;
-
--- name: UpdateDriverStatus :one
-UPDATE drivers SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING *;
-
--- name: GetNearbyDrivers :many
-SELECT *, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
-FROM drivers
-WHERE status = 'online' AND ST_DWithin(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326), $3)
-ORDER BY distance LIMIT $4;
-
--- name: CreateTaxiTrip :one
-INSERT INTO taxi_trips (id, user_id, pickup_location, dropoff_location, total_amount, currency)
-VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), ST_SetSRID(ST_MakePoint($5, $6), 4326), $7, $8)
-RETURNING *;
-
--- Property
--- name: ListProperties :many
-SELECT p.*, b.name as business_name, a.city, a.address_line1
-FROM properties p
-JOIN businesses b ON p.business_id = b.id
-LEFT JOIN addresses a ON p.address_id = a.id
-WHERE (sqlc.narg('city')::text IS NULL OR a.city ILIKE '%' || sqlc.narg('city') || '%')
-AND (sqlc.narg('max_price')::numeric IS NULL OR p.price_per_night <= sqlc.narg('max_price'))
-AND (sqlc.narg('min_rooms')::int IS NULL OR p.number_of_bedrooms >= sqlc.narg('min_rooms'));
-
--- name: GetPropertyByID :one
-SELECT p.*, b.name as business_name, a.city, a.address_line1
-FROM properties p
-JOIN businesses b ON p.business_id = b.id
-LEFT JOIN addresses a ON p.address_id = a.id
-WHERE p.id = $1;
-
--- name: CreateProperty :one
-INSERT INTO properties (id, business_id, title, description, address_id, price_per_night, currency, number_of_guests, number_of_bedrooms, type, image_urls)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING *;
-
--- name: CreatePropertyBooking :one
-INSERT INTO property_bookings (id, user_id, property_id, check_in_date, check_out_date, total_amount, currency, status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-RETURNING *;
-
--- name: SearchPropertiesByLocation :many
-SELECT p.* FROM properties p
-JOIN addresses a ON p.address_id = a.id
-WHERE ST_DWithin(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326), ST_SetSRID(ST_MakePoint($1, $2), 4326), $3);
-
--- Reviews
--- name: AddReview :one
-INSERT INTO reviews (id, target_id, target_type, user_id, rating, comment)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING *;
-
--- name: GetReviewsByTarget :many
-SELECT * FROM reviews WHERE target_id = $1 AND target_type = $2 ORDER BY created_at DESC;
-
--- eCommerce Stock
--- name: LockAndDecrementStock :exec
-UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2 AND stock_quantity >= $1;
+-- name: DeleteProductModel :exec
+DELETE FROM product_models WHERE id = $1;
 
 -- name: CreateProduct :one
-INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, image_urls, rating, review_count, is_flash_sale, discount_percentage)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_flash_sale, discount_percentage)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING *;
+
+-- name: UpdateProduct :one
+UPDATE products SET 
+    name = $2, description = $3, price = $4, stock_quantity = $5, 
+    category_id = $6, brand_id = $7, model_id = $8, image_urls = $9, 
+    is_flash_sale = $10, discount_percentage = $11, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 RETURNING *;
 
 -- name: CreateGroceryItem :one
 INSERT INTO grocery_items (id, business_id, name, description, price, currency, image_url, unit, stock_quantity, category, is_available)
@@ -403,10 +379,6 @@ RETURNING *;
 -- Hubs
 -- name: CreateHub :one
 INSERT INTO hubs (id, name, description) VALUES ($1, $2, $3) RETURNING *;
-
--- Brands
--- name: CreateBrand :one
-INSERT INTO brands (id, name, logo_url) VALUES ($1, $2, $3) RETURNING *;
 
 -- Business Status
 -- name: UpdateBusinessStatus :one
@@ -497,3 +469,112 @@ INSERT INTO business_locations (business_id, address_id) VALUES ($1, $2);
 SELECT a.* FROM addresses a
 JOIN business_locations bl ON a.id = bl.address_id
 WHERE bl.business_id = $1;
+
+-- Cart Items
+-- name: GetCartItemsByUserID :many
+SELECT c.*, p.name, p.price, p.currency, b.name as business_name
+FROM cart_items c
+JOIN products p ON c.item_id = p.id
+JOIN businesses b ON c.business_id = b.id
+WHERE c.user_id = $1;
+
+-- name: AddItemToCart :one
+INSERT INTO cart_items (id, user_id, business_id, item_id, item_type, quantity)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET quantity = cart_items.quantity + $6, updated_at = CURRENT_TIMESTAMP
+RETURNING *;
+
+-- name: UpdateCartItemQuantity :exec
+UPDATE cart_items SET quantity = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1;
+
+-- name: RemoveCartItem :exec
+DELETE FROM cart_items WHERE id = $1;
+
+-- Orders
+-- name: CreateOrder :one
+INSERT INTO orders (id, user_id, total_amount, currency, status, shipping_address_id)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: GetOrdersByUserID :many
+SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC;
+
+-- name: CreateOrderItem :one
+INSERT INTO order_items (id, order_id, business_id, item_id, item_type, quantity, unit_price)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: ClearCart :exec
+DELETE FROM cart_items WHERE user_id = $1;
+
+-- name: LockAndDecrementStock :exec
+UPDATE products SET stock_quantity = stock_quantity - $1 WHERE id = $2 AND stock_quantity >= $1;
+
+-- Addresses
+-- name: ListUserAddresses :many
+SELECT * FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC;
+
+-- name: CreateAddress :one
+INSERT INTO addresses (id, user_id, label, address_line1, city, country, is_default)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- Property
+-- name: ListProperties :many
+SELECT p.*, b.name as business_name, a.city, a.address_line1
+FROM properties p
+JOIN businesses b ON p.business_id = b.id
+LEFT JOIN addresses a ON p.address_id = a.id
+WHERE (sqlc.narg('city')::text IS NULL OR a.city ILIKE '%' || sqlc.narg('city') || '%')
+AND (sqlc.narg('max_price')::numeric IS NULL OR p.price_per_night <= sqlc.narg('max_price'))
+AND (sqlc.narg('min_rooms')::int IS NULL OR p.number_of_bedrooms >= sqlc.narg('min_rooms'));
+
+-- name: GetPropertyByID :one
+SELECT p.*, b.name as business_name, a.city, a.address_line1
+FROM properties p
+JOIN businesses b ON p.business_id = b.id
+LEFT JOIN addresses a ON p.address_id = a.id
+WHERE p.id = $1;
+
+-- name: CreateProperty :one
+INSERT INTO properties (id, business_id, title, description, address_id, price_per_night, currency, number_of_guests, number_of_bedrooms, type, image_urls)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *;
+
+-- name: CreatePropertyBooking :one
+INSERT INTO property_bookings (id, user_id, property_id, check_in_date, check_out_date, total_amount, currency, status)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+RETURNING *;
+
+-- name: SearchPropertiesByLocation :many
+SELECT p.* FROM properties p
+JOIN addresses a ON p.address_id = a.id
+WHERE ST_DWithin(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326), ST_SetSRID(ST_MakePoint($1, $2), 4326), $3);
+
+-- Taxi
+-- name: UpdateDriverLocation :one
+UPDATE drivers SET last_location = ST_SetSRID(ST_MakePoint($2, $3), 4326), updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING *;
+
+-- name: UpdateDriverStatus :one
+UPDATE drivers SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING *;
+
+-- name: GetNearbyDrivers :many
+SELECT *, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+FROM drivers
+WHERE status = 'online' AND ST_DWithin(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326), $3)
+ORDER BY distance LIMIT $4;
+
+-- name: CreateTaxiTrip :one
+INSERT INTO taxi_trips (id, user_id, pickup_location, dropoff_location, total_amount, currency)
+VALUES ($1, $2, ST_SetSRID(ST_MakePoint($3, $4), 4326), ST_SetSRID(ST_MakePoint($5, $6), 4326), $7, $8)
+RETURNING *;
+
+-- Reviews
+-- name: AddReview :one
+INSERT INTO reviews (id, target_id, target_type, user_id, rating, comment)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: GetReviewsByTarget :many
+SELECT * FROM reviews WHERE target_id = $1 AND target_type = $2 ORDER BY created_at DESC;
+

@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
+	"ehubgo/cache"
 	"ehubgo/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -15,12 +17,14 @@ import (
 type EcommerceHandler struct {
 	Queries *db.Queries
 	DB      *sql.DB
+	Cache   cache.Store
 }
 
-func NewEcommerceHandler(queries *db.Queries, dbConn *sql.DB) *EcommerceHandler {
+func NewEcommerceHandler(queries *db.Queries, dbConn *sql.DB, c cache.Store) *EcommerceHandler {
 	return &EcommerceHandler{
 		Queries: queries,
 		DB:      dbConn,
+		Cache:   c,
 	}
 }
 
@@ -34,6 +38,7 @@ type ProductDTO struct {
 	StockQuantity      int32      `json:"stock_quantity"`
 	CategoryID         *string    `json:"category_id"`
 	BrandID            *string    `json:"brand_id"`
+	ModelID            *string    `json:"model_id"`
 	ImageUrls          []string   `json:"image_urls"`
 	Rating             *string    `json:"rating"`
 	ReviewCount        *int32     `json:"review_count"`
@@ -41,6 +46,9 @@ type ProductDTO struct {
 	DiscountPercentage *string    `json:"discount_percentage"`
 	CreatedAt          *time.Time `json:"created_at"`
 	UpdatedAt          *time.Time `json:"updated_at"`
+	CategoryName       *string    `json:"category_name"`
+	BrandName          *string    `json:"brand_name"`
+	ModelName          *string    `json:"model_name"`
 }
 
 func ToProductDTO(p db.Product) ProductDTO {
@@ -54,6 +62,7 @@ func ToProductDTO(p db.Product) ProductDTO {
 		StockQuantity:      p.StockQuantity,
 		CategoryID:         NullStringToString(p.CategoryID),
 		BrandID:            NullStringToString(p.BrandID),
+		ModelID:            NullStringToString(p.ModelID),
 		ImageUrls:          p.ImageUrls,
 		Rating:             NullStringToString(p.Rating),
 		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
@@ -64,11 +73,79 @@ func ToProductDTO(p db.Product) ProductDTO {
 	}
 }
 
-// ListFeaturedProducts returns best-selling and verified products with pagination
+func GetProductsRowToDTO(p db.GetProductsRow) ProductDTO {
+	return ProductDTO{
+		ID:                 p.ID,
+		BusinessID:         p.BusinessID,
+		Name:               p.Name,
+		Description:        NullStringToString(p.Description),
+		Price:              p.Price,
+		Currency:           p.Currency,
+		StockQuantity:      p.StockQuantity,
+		CategoryID:         NullStringToString(p.CategoryID),
+		BrandID:            NullStringToString(p.BrandID),
+		ModelID:            NullStringToString(p.ModelID),
+		ImageUrls:          p.ImageUrls,
+		Rating:             NullStringToString(p.Rating),
+		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
+		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
+		DiscountPercentage: NullStringToString(p.DiscountPercentage),
+		CreatedAt:          NullTimeToTime(p.CreatedAt),
+		UpdatedAt:          NullTimeToTime(p.UpdatedAt),
+		CategoryName:       NullStringToString(p.CategoryName),
+		BrandName:          NullStringToString(p.BrandName),
+		ModelName:          NullStringToString(p.ModelName),
+	}
+}
+
+func GetProductByIDRowToDTO(p db.GetProductByIDWithDetailsRow) ProductDTO {
+	return ProductDTO{
+		ID:                 p.ID,
+		BusinessID:         p.BusinessID,
+		Name:               p.Name,
+		Description:        NullStringToString(p.Description),
+		Price:              p.Price,
+		Currency:           p.Currency,
+		StockQuantity:      p.StockQuantity,
+		CategoryID:         NullStringToString(p.CategoryID),
+		BrandID:            NullStringToString(p.BrandID),
+		ModelID:            NullStringToString(p.ModelID),
+		ImageUrls:          p.ImageUrls,
+		Rating:             NullStringToString(p.Rating),
+		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
+		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
+		DiscountPercentage: NullStringToString(p.DiscountPercentage),
+		CreatedAt:          NullTimeToTime(p.CreatedAt),
+		UpdatedAt:          NullTimeToTime(p.UpdatedAt),
+		CategoryName:       NullStringToString(p.CategoryName),
+		BrandName:          NullStringToString(p.BrandName),
+		ModelName:          NullStringToString(p.ModelName),
+	}
+}
+
+// @Summary List featured products
+// @Description Returns best-selling and verified products with pagination and caching
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param limit query int false "Limit"
+// @Param offset query int false "Offset"
+// @Success 200 {array} ProductDTO
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/featured-products [get]
 func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
 	
+	cacheKey := fmt.Sprintf("featured_products:%s:%s", limitStr, offsetStr)
+	
+	if h.Cache != nil && h.Cache.IsAvailable() {
+		if cachedData, err := h.Cache.Get(c.Request.Context(), cacheKey); err == nil {
+			c.Data(http.StatusOK, "application/json", []byte(cachedData))
+			return
+		}
+	}
+
 	limit, _ := strconv.Atoi(limitStr)
 	offset, _ := strconv.Atoi(offsetStr)
 
@@ -86,6 +163,12 @@ func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 		for _, p := range products {
 			dtoList = append(dtoList, ToProductDTO(p))
 		}
+		
+		if h.Cache != nil && h.Cache.IsAvailable() {
+			jsonBytes, _ := json.Marshal(dtoList)
+			h.Cache.Set(c.Request.Context(), cacheKey, jsonBytes, 5*time.Minute)
+		}
+		
 		c.JSON(http.StatusOK, dtoList)
 		return nil
 	})
@@ -94,6 +177,648 @@ func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 }
+
+// @Summary Search products
+// @Description Uses PostgreSQL full-text search to find products by name or description
+// @Tags products
+// @Accept json
+// @Produce json
+// @Param q query string true "Search query"
+// @Param limit query int false "Limit"
+// @Success 200 {array} ProductDTO
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/products/search [get]
+func (h *EcommerceHandler) SearchProducts(c *gin.Context) {
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "search query 'q' is required"})
+		return
+	}
+
+	limitStr := c.DefaultQuery("limit", "20")
+	limit, _ := strconv.Atoi(limitStr)
+
+	// Since sqlc queries might not have the specific search endpoint generated depending on the schema version,
+	// we use a raw SQL query that leverages the to_tsvector index created in schema.sql.
+	sqlQuery := `
+		SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, 
+			   p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, 
+			   p.rating, p.review_count, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at
+		FROM products p
+		WHERE to_tsvector('english', p.name || ' ' || COALESCE(p.description, '')) @@ plainto_tsquery('english', $1)
+		ORDER BY ts_rank(to_tsvector('english', p.name || ' ' || COALESCE(p.description, '')), plainto_tsquery('english', $1)) DESC
+		LIMIT $2
+	`
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(c.Request.Context(), sqlQuery, query, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		dtoList := make([]ProductDTO, 0)
+		for rows.Next() {
+			var p db.Product
+			err := rows.Scan(
+				&p.ID, &p.BusinessID, &p.Name, &p.Description, &p.Price, &p.Currency,
+				&p.StockQuantity, &p.CategoryID, &p.BrandID, &p.ModelID, &p.ImageUrls,
+				&p.Rating, &p.ReviewCount, &p.IsFlashSale, &p.DiscountPercentage, &p.CreatedAt, &p.UpdatedAt,
+			)
+			if err != nil {
+				return err
+			}
+			dtoList = append(dtoList, ToProductDTO(p))
+		}
+		c.JSON(http.StatusOK, dtoList)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// ListProducts returns all products with pagination
+func (h *EcommerceHandler) ListProducts(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "10")
+	offsetStr := c.DefaultQuery("offset", "0")
+	
+	limit, _ := strconv.Atoi(limitStr)
+	offset, _ := strconv.Atoi(offsetStr)
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		products, err := qtx.GetProducts(c.Request.Context(), db.GetProductsParams{
+			Offset: int32(offset),
+			Limit:  int32(limit),
+		})
+		if err != nil {
+			return err
+		}
+
+		dtoList := make([]ProductDTO, 0)
+		for _, p := range products {
+			dtoList = append(dtoList, GetProductsRowToDTO(p))
+		}
+		c.JSON(http.StatusOK, dtoList)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// GetProductByID returns a single product with details
+func (h *EcommerceHandler) GetProductByID(c *gin.Context) {
+	id := c.Param("id")
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		p, err := qtx.GetProductByIDWithDetails(c.Request.Context(), id)
+		if err != nil {
+			return err
+		}
+
+		dto := GetProductByIDRowToDTO(p)
+		c.JSON(http.StatusOK, dto)
+		return nil
+	})
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+	}
+}
+
+// CreateProduct creates a new product
+func (h *EcommerceHandler) CreateProduct(c *gin.Context) {
+	var req struct {
+		BusinessID         string   `json:"business_id" binding:"required"`
+		Name               string   `json:"name" binding:"required"`
+		Description        string   `json:"description"`
+		Price              string   `json:"price" binding:"required"`
+		Currency           string   `json:"currency"`
+		StockQuantity      int32    `json:"stock_quantity"`
+		CategoryID         string   `json:"category_id"`
+		BrandID            string   `json:"brand_id"`
+		ModelID            string   `json:"model_id"`
+		ImageUrls          []string `json:"image_urls"`
+		IsFlashSale        bool     `json:"is_flash_sale"`
+		DiscountPercentage string   `json:"discount_percentage"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Currency == "" {
+		req.Currency = "Ksh"
+	}
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		p, err := qtx.CreateProduct(c.Request.Context(), db.CreateProductParams{
+			ID:                 uuid.New().String(),
+			BusinessID:         req.BusinessID,
+			Name:               req.Name,
+			Description:        sql.NullString{String: req.Description, Valid: req.Description != ""},
+			Price:              req.Price,
+			Currency:           req.Currency,
+			StockQuantity:      req.StockQuantity,
+			CategoryID:         sql.NullString{String: req.CategoryID, Valid: req.CategoryID != ""},
+			BrandID:            sql.NullString{String: req.BrandID, Valid: req.BrandID != ""},
+			ModelID:            sql.NullString{String: req.ModelID, Valid: req.ModelID != ""},
+			ImageUrls:          req.ImageUrls,
+			IsFlashSale:        sql.NullBool{Bool: req.IsFlashSale, Valid: true},
+			DiscountPercentage: sql.NullString{String: req.DiscountPercentage, Valid: req.DiscountPercentage != ""},
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusCreated, ToProductDTO(p))
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// UpdateProduct updates an existing product
+func (h *EcommerceHandler) UpdateProduct(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Name               string   `json:"name" binding:"required"`
+		Description        string   `json:"description"`
+		Price              string   `json:"price" binding:"required"`
+		StockQuantity      int32    `json:"stock_quantity"`
+		CategoryID         string   `json:"category_id"`
+		BrandID            string   `json:"brand_id"`
+		ModelID            string   `json:"model_id"`
+		ImageUrls          []string `json:"image_urls"`
+		IsFlashSale        bool     `json:"is_flash_sale"`
+		DiscountPercentage string   `json:"discount_percentage"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		p, err := qtx.UpdateProduct(c.Request.Context(), db.UpdateProductParams{
+			ID:                 id,
+			Name:               req.Name,
+			Description:        sql.NullString{String: req.Description, Valid: req.Description != ""},
+			Price:              req.Price,
+			StockQuantity:      req.StockQuantity,
+			CategoryID:         sql.NullString{String: req.CategoryID, Valid: req.CategoryID != ""},
+			BrandID:            sql.NullString{String: req.BrandID, Valid: req.BrandID != ""},
+			ModelID:            sql.NullString{String: req.ModelID, Valid: req.ModelID != ""},
+			ImageUrls:          req.ImageUrls,
+			IsFlashSale:        sql.NullBool{Bool: req.IsFlashSale, Valid: true},
+			DiscountPercentage: sql.NullString{String: req.DiscountPercentage, Valid: req.DiscountPercentage != ""},
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, ToProductDTO(p))
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// DeleteProduct removes a product from the database
+func (h *EcommerceHandler) DeleteProduct(c *gin.Context) {
+	id := c.Param("id")
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		err := qtx.DeleteProduct(c.Request.Context(), id)
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// --- Categories ---
+
+type CategoryDTO struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	ImageUrl    *string    `json:"image_url"`
+	ParentID    *string    `json:"parent_id"`
+	CreatedAt   *time.Time `json:"created_at"`
+	UpdatedAt   *time.Time `json:"updated_at"`
+}
+
+func ToCategoryDTO(cat db.Category) CategoryDTO {
+	return CategoryDTO{
+		ID:          cat.ID,
+		Name:        cat.Name,
+		Description: NullStringToString(cat.Description),
+		ImageUrl:    NullStringToString(cat.ImageUrl),
+		ParentID:    NullStringToString(cat.ParentID),
+		CreatedAt:   NullTimeToTime(cat.CreatedAt),
+		UpdatedAt:   NullTimeToTime(cat.UpdatedAt),
+	}
+}
+
+// ListCategories returns all categories
+func (h *EcommerceHandler) ListCategories(c *gin.Context) {
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		categories, err := qtx.GetCategories(c.Request.Context())
+		if err != nil {
+			return err
+		}
+
+		dtoList := make([]CategoryDTO, 0)
+		for _, cat := range categories {
+			dtoList = append(dtoList, ToCategoryDTO(cat))
+		}
+		c.JSON(http.StatusOK, dtoList)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) CreateCategory(c *gin.Context) {
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Description string `json:"description"`
+		ImageUrl    string `json:"image_url"`
+		ParentID    string `json:"parent_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		cat, err := qtx.CreateCategory(c.Request.Context(), db.CreateCategoryParams{
+			ID:          uuid.New().String(),
+			Name:        req.Name,
+			Description: sql.NullString{String: req.Description, Valid: req.Description != ""},
+			ImageUrl:    sql.NullString{String: req.ImageUrl, Valid: req.ImageUrl != ""},
+			ParentID:    sql.NullString{String: req.ParentID, Valid: req.ParentID != ""},
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusCreated, ToCategoryDTO(cat))
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) UpdateCategory(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Description string `json:"description"`
+		ImageUrl    string `json:"image_url"`
+		ParentID    string `json:"parent_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		cat, err := qtx.UpdateCategory(c.Request.Context(), db.UpdateCategoryParams{
+			ID:          id,
+			Name:        req.Name,
+			Description: sql.NullString{String: req.Description, Valid: req.Description != ""},
+			ImageUrl:    sql.NullString{String: req.ImageUrl, Valid: req.ImageUrl != ""},
+			ParentID:    sql.NullString{String: req.ParentID, Valid: req.ParentID != ""},
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, ToCategoryDTO(cat))
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) DeleteCategory(c *gin.Context) {
+	id := c.Param("id")
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		return qtx.DeleteCategory(c.Request.Context(), id)
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "category deleted"})
+}
+
+// --- Brands ---
+
+type BrandDTO struct {
+	ID           string     `json:"id"`
+	Name         string     `json:"name"`
+	LogoUrl      *string    `json:"logo_url"`
+	CategoryID   *string    `json:"category_id"`
+	CategoryName *string    `json:"category_name"`
+	CreatedAt    *time.Time `json:"created_at"`
+	UpdatedAt    *time.Time `json:"updated_at"`
+}
+
+func ToBrandDTO(b db.Brand) BrandDTO {
+	return BrandDTO{
+		ID:         b.ID,
+		Name:       b.Name,
+		LogoUrl:    NullStringToString(b.LogoUrl),
+		CategoryID: NullStringToString(b.CategoryID),
+		CreatedAt:  NullTimeToTime(b.CreatedAt),
+		UpdatedAt:  NullTimeToTime(b.UpdatedAt),
+	}
+}
+
+func GetBrandsRowToDTO(b db.GetBrandsRow) BrandDTO {
+	return BrandDTO{
+		ID:           b.ID,
+		Name:         b.Name,
+		LogoUrl:      NullStringToString(b.LogoUrl),
+		CategoryID:   NullStringToString(b.CategoryID),
+		CategoryName: NullStringToString(b.CategoryName),
+		CreatedAt:    NullTimeToTime(b.CreatedAt),
+		UpdatedAt:    NullTimeToTime(b.UpdatedAt),
+	}
+}
+
+func (h *EcommerceHandler) ListBrands(c *gin.Context) {
+	catID := c.Query("category_id")
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		if catID != "" {
+			brands, err := qtx.ListBrandsByCategory(c.Request.Context(), sql.NullString{String: catID, Valid: true})
+			if err != nil {
+				return err
+			}
+			dtoList := make([]BrandDTO, 0)
+			for _, b := range brands {
+				dtoList = append(dtoList, ToBrandDTO(b))
+			}
+			c.JSON(http.StatusOK, dtoList)
+		} else {
+			brands, err := qtx.GetBrands(c.Request.Context())
+			if err != nil {
+				return err
+			}
+			dtoList := make([]BrandDTO, 0)
+			for _, b := range brands {
+				dtoList = append(dtoList, GetBrandsRowToDTO(b))
+			}
+			c.JSON(http.StatusOK, dtoList)
+		}
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) CreateBrand(c *gin.Context) {
+	var req struct {
+		Name       string `json:"name" binding:"required"`
+		LogoUrl    string `json:"logo_url"`
+		CategoryID string `json:"category_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		brand, err := qtx.CreateBrand(c.Request.Context(), db.CreateBrandParams{
+			ID:         uuid.New().String(),
+			Name:       req.Name,
+			LogoUrl:    sql.NullString{String: req.LogoUrl, Valid: req.LogoUrl != ""},
+			CategoryID: sql.NullString{String: req.CategoryID, Valid: req.CategoryID != ""},
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusCreated, ToBrandDTO(brand))
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) UpdateBrand(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Name       string `json:"name" binding:"required"`
+		LogoUrl    string `json:"logo_url"`
+		CategoryID string `json:"category_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		brand, err := qtx.UpdateBrand(c.Request.Context(), db.UpdateBrandParams{
+			ID:         id,
+			Name:       req.Name,
+			LogoUrl:    sql.NullString{String: req.LogoUrl, Valid: req.LogoUrl != ""},
+			CategoryID: sql.NullString{String: req.CategoryID, Valid: req.CategoryID != ""},
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, ToBrandDTO(brand))
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) DeleteBrand(c *gin.Context) {
+	id := c.Param("id")
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		return qtx.DeleteBrand(c.Request.Context(), id)
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "brand deleted"})
+}
+
+// --- Product Models ---
+
+type ProductModelDTO struct {
+	ID        string     `json:"id"`
+	BrandID   string     `json:"brand_id"`
+	BrandName *string    `json:"brand_name"`
+	Name      string     `json:"name"`
+	ImageUrl  *string    `json:"image_url"`
+	CreatedAt *time.Time `json:"created_at"`
+	UpdatedAt *time.Time `json:"updated_at"`
+}
+
+func ToProductModelDTO(m db.ProductModel) ProductModelDTO {
+	return ProductModelDTO{
+		ID:        m.ID,
+		BrandID:   m.BrandID,
+		Name:      m.Name,
+		ImageUrl:  NullStringToString(m.ImageUrl),
+		CreatedAt: NullTimeToTime(m.CreatedAt),
+		UpdatedAt: NullTimeToTime(m.UpdatedAt),
+	}
+}
+
+func ListProductModelsRowToDTO(m db.ListProductModelsRow) ProductModelDTO {
+	return ProductModelDTO{
+		ID:        m.ID,
+		BrandID:   m.BrandID,
+		BrandName: &m.BrandName,
+		Name:      m.Name,
+		ImageUrl:  NullStringToString(m.ImageUrl),
+		CreatedAt: NullTimeToTime(m.CreatedAt),
+		UpdatedAt: NullTimeToTime(m.UpdatedAt),
+	}
+}
+
+func (h *EcommerceHandler) ListProductModels(c *gin.Context) {
+	brandID := c.Query("brand_id")
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		if brandID != "" {
+			models, err := qtx.ListModelsByBrand(c.Request.Context(), brandID)
+			if err != nil {
+				return err
+			}
+			dtoList := make([]ProductModelDTO, 0)
+			for _, m := range models {
+				dtoList = append(dtoList, ToProductModelDTO(m))
+			}
+			c.JSON(http.StatusOK, dtoList)
+		} else {
+			models, err := qtx.ListProductModels(c.Request.Context())
+			if err != nil {
+				return err
+			}
+			dtoList := make([]ProductModelDTO, 0)
+			for _, m := range models {
+				dtoList = append(dtoList, ListProductModelsRowToDTO(m))
+			}
+			c.JSON(http.StatusOK, dtoList)
+		}
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) CreateProductModel(c *gin.Context) {
+	var req struct {
+		BrandID  string `json:"brand_id" binding:"required"`
+		Name     string `json:"name" binding:"required"`
+		ImageUrl string `json:"image_url"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		m, err := qtx.CreateProductModel(c.Request.Context(), db.CreateProductModelParams{
+			ID:       uuid.New().String(),
+			BrandID:  req.BrandID,
+			Name:     req.Name,
+			ImageUrl: sql.NullString{String: req.ImageUrl, Valid: req.ImageUrl != ""},
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusCreated, ToProductModelDTO(m))
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) UpdateProductModel(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		BrandID  string `json:"brand_id" binding:"required"`
+		Name     string `json:"name" binding:"required"`
+		ImageUrl string `json:"image_url"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		m, err := qtx.UpdateProductModel(c.Request.Context(), db.UpdateProductModelParams{
+			ID:       id,
+			BrandID:  req.BrandID,
+			Name:     req.Name,
+			ImageUrl: sql.NullString{String: req.ImageUrl, Valid: req.ImageUrl != ""},
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, ToProductModelDTO(m))
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func (h *EcommerceHandler) DeleteProductModel(c *gin.Context) {
+	id := c.Param("id")
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		return qtx.DeleteProductModel(c.Request.Context(), id)
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "product model deleted"})
+}
+
+// --- Existing methods ---
 
 // GetCart returns cart items for the current user
 func (h *EcommerceHandler) GetCart(c *gin.Context) {
@@ -239,9 +964,13 @@ func (h *EcommerceHandler) Checkout(c *gin.Context) {
 			}
 		}
 
-		// 3. Create Order
+		// 3. Calculate Total and Create Order
 		orderID := uuid.New().String()
 		totalAmount := 0.0
+		for _, item := range cartItems {
+			price, _ := strconv.ParseFloat(item.Price, 64)
+			totalAmount += price * float64(item.Quantity)
+		}
 
 		order, err := qtx.CreateOrder(c.Request.Context(), db.CreateOrderParams{
 			ID:                orderID,
@@ -257,7 +986,6 @@ func (h *EcommerceHandler) Checkout(c *gin.Context) {
 
 		// 4. Create Order Items
 		for _, item := range cartItems {
-			unitPrice := "100.00" // Placeholder
 			_, err = qtx.CreateOrderItem(c.Request.Context(), db.CreateOrderItemParams{
 				ID:         uuid.New().String(),
 				OrderID:    orderID,
@@ -265,7 +993,7 @@ func (h *EcommerceHandler) Checkout(c *gin.Context) {
 				ItemID:     item.ItemID,
 				ItemType:   item.ItemType,
 				Quantity:   item.Quantity,
-				UnitPrice:  unitPrice,
+				UnitPrice:  item.Price,
 			})
 			if err != nil {
 				return err
@@ -298,125 +1026,6 @@ func (h *EcommerceHandler) GetOrders(c *gin.Context) {
 			return err
 		}
 		c.JSON(http.StatusOK, orders)
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
-}
-
-type CategoryDTO struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
-	ImageUrl    *string    `json:"image_url"`
-	ParentID    *string    `json:"parent_id"`
-	CreatedAt   *time.Time `json:"created_at"`
-	UpdatedAt   *time.Time `json:"updated_at"`
-}
-
-func ToCategoryDTO(cat db.Category) CategoryDTO {
-	return CategoryDTO{
-		ID:          cat.ID,
-		Name:        cat.Name,
-		Description: NullStringToString(cat.Description),
-		ImageUrl:    NullStringToString(cat.ImageUrl),
-		ParentID:    NullStringToString(cat.ParentID),
-		CreatedAt:   NullTimeToTime(cat.CreatedAt),
-		UpdatedAt:   NullTimeToTime(cat.UpdatedAt),
-	}
-}
-
-// ListProducts returns all products with pagination
-func (h *EcommerceHandler) ListProducts(c *gin.Context) {
-	limitStr := c.DefaultQuery("limit", "10")
-	offsetStr := c.DefaultQuery("offset", "0")
-	
-	limit, _ := strconv.Atoi(limitStr)
-	offset, _ := strconv.Atoi(offsetStr)
-
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		products, err := qtx.GetProducts(c.Request.Context(), db.GetProductsParams{
-			Offset: int32(offset),
-			Limit:  int32(limit),
-		})
-		if err != nil {
-			return err
-		}
-
-		dtoList := make([]ProductDTO, 0)
-		for _, p := range products {
-			dtoList = append(dtoList, ToProductDTO(p))
-		}
-		c.JSON(http.StatusOK, dtoList)
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
-}
-
-// GetProductByID returns a single product with details
-func (h *EcommerceHandler) GetProductByID(c *gin.Context) {
-	id := c.Param("id")
-
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		p, err := qtx.GetProductByIDWithDetails(c.Request.Context(), id)
-		if err != nil {
-			return err
-		}
-
-		dto := ToProductDTO(p)
-		c.JSON(http.StatusOK, dto)
-		return nil
-	})
-
-	if err != nil {
-		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-	}
-}
-
-// ListCategories returns all categories
-func (h *EcommerceHandler) ListCategories(c *gin.Context) {
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		categories, err := qtx.GetCategories(c.Request.Context())
-		if err != nil {
-			return err
-		}
-
-		dtoList := make([]CategoryDTO, 0)
-		for _, cat := range categories {
-			dtoList = append(dtoList, ToCategoryDTO(cat))
-		}
-		c.JSON(http.StatusOK, dtoList)
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
-}
-
-// DeleteProduct removes a product from the database
-func (h *EcommerceHandler) DeleteProduct(c *gin.Context) {
-	id := c.Param("id")
-
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		err := qtx.DeleteProduct(c.Request.Context(), id)
-		if err != nil {
-			return err
-		}
-		c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
 		return nil
 	})
 

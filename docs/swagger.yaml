@@ -1,0 +1,163 @@
+definitions:
+  handlers.FeedbackDTO:
+    properties:
+      comment:
+        type: string
+      rating:
+        maximum: 5
+        minimum: 1
+        type: integer
+    required:
+    - rating
+    type: object
+  handlers.ProductDTO:
+    properties:
+      brand_id:
+        type: string
+      brand_name:
+        type: string
+      business_id:
+        type: string
+      category_id:
+        type: string
+      category_name:
+        type: string
+      created_at:
+        type: string
+      currency:
+        type: string
+      description:
+        type: string
+      discount_percentage:
+        type: string
+      id:
+        type: string
+      image_urls:
+        items:
+          type: string
+        type: array
+      is_flash_sale:
+        type: boolean
+      model_id:
+        type: string
+      model_name:
+        type: string
+      name:
+        type: string
+      price:
+        type: string
+      rating:
+        type: string
+      review_count:
+        type: integer
+      stock_quantity:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /api/v1/featured-products:
+    get:
+      consumes:
+      - application/json
+      description: Returns best-selling and verified products with pagination and
+        caching
+      parameters:
+      - description: Limit
+        in: query
+        name: limit
+        type: integer
+      - description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.ProductDTO'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List featured products
+      tags:
+      - products
+  /api/v1/feedback:
+    post:
+      consumes:
+      - application/json
+      description: Submit rating and textual feedback from the mobile/web app
+      parameters:
+      - description: Feedback payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.FeedbackDTO'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Submit user feedback
+      tags:
+      - feedback
+  /api/v1/products/search:
+    get:
+      consumes:
+      - application/json
+      description: Uses PostgreSQL full-text search to find products by name or description
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: Limit
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.ProductDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Search products
+      tags:
+      - products
+swagger: "2.0"

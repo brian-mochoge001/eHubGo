@@ -10,7 +10,8 @@ CREATE TYPE user_role_type AS ENUM (
     'customer', 
     'driver', 
     'host', 
-    'c2c_seller'
+    'c2c_seller',
+    'user'
 );
 
 -- Business Verification Status
@@ -105,8 +106,20 @@ CREATE TABLE brands (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT UNIQUE NOT NULL,
     logo_url TEXT,
+    category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Product Models Table
+CREATE TABLE product_models (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    brand_id TEXT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    image_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(brand_id, name)
 );
 
 -- Businesses (The "Stalls" in the Mall)
@@ -170,6 +183,7 @@ CREATE TABLE products (
     stock_quantity INTEGER NOT NULL DEFAULT 0,
     category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
     brand_id TEXT REFERENCES brands(id) ON DELETE SET NULL,
+    model_id TEXT REFERENCES product_models(id) ON DELETE SET NULL,
     image_urls TEXT[],
     rating NUMERIC(2, 1) DEFAULT 0.0,
     review_count INTEGER DEFAULT 0,
@@ -360,6 +374,18 @@ CREATE TABLE refreshments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Movie Showtimes
+CREATE TABLE movie_showtimes (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    movie_id TEXT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    show_time TIMESTAMP WITH TIME ZONE NOT NULL,
+    price NUMERIC(10, 2) NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'Ksh',
+    room_number TEXT,
+    available_seats INTEGER NOT NULL DEFAULT 0
+);
+
 -- Tickets
 CREATE TABLE tickets (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -372,18 +398,6 @@ CREATE TABLE tickets (
     total_amount NUMERIC(10, 2) NOT NULL,
     status TEXT NOT NULL DEFAULT 'booked',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- Movie Showtimes
-CREATE TABLE movie_showtimes (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-    movie_id TEXT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
-    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-    show_time TIMESTAMP WITH TIME ZONE NOT NULL,
-    price NUMERIC(10, 2) NOT NULL,
-    currency TEXT NOT NULL DEFAULT 'Ksh',
-    room_number TEXT,
-    available_seats INTEGER NOT NULL DEFAULT 0
 );
 
 -- Flights (eFlights)
