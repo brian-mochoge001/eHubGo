@@ -737,6 +737,9 @@ CREATE POLICY business_locations_policy ON business_locations
     FOR ALL USING (business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff') OR has_role('admin'));
 
 -- 3. PRODUCTS/SERVICES/PROPERTIES Policy
+CREATE POLICY products_view_policy ON products
+    FOR SELECT USING (business_id IN (SELECT id FROM businesses WHERE verification_status = 'approved' OR owner_id = get_app_user_id()) OR has_role('staff'));
+
 CREATE POLICY products_manage_policy ON products
     FOR ALL USING (
         business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR has_role('staff')

@@ -17,7 +17,7 @@ func init() {
 // ChaosMiddleware injects random latency or HTTP 500 errors if CHAOS_MODE=true is set in the environment.
 // It is intended to test client retry logic and resiliency.
 func ChaosMiddleware() gin.HandlerFunc {
-	chaosMode := os.Getenv("CHAOS_MODE") == "true"
+	chaosMode := os.Getenv("CHAOS_MODE") == "true" && os.Getenv("GO_ENV") != "production"
 
 	return func(c *gin.Context) {
 		if !chaosMode {
@@ -25,8 +25,8 @@ func ChaosMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 15% chance to inject an artificial 500 Internal Server Error
-		if rand.Float32() < 0.15 {
+		// 5% chance to inject an artificial 500 Internal Server Error
+		if rand.Float32() < 0.05 {
 			log.Printf("[CHAOS] Injecting HTTP 500 for request: %s %s", c.Request.Method, c.Request.URL.Path)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"error": "Chaos Monkey injected an internal error!",

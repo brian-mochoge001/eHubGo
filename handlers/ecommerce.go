@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 type EcommerceHandler struct {
@@ -75,6 +76,31 @@ func ToProductDTO(p db.Product) ProductDTO {
 }
 
 func GetProductsRowToDTO(p db.GetProductsRow) ProductDTO {
+	return ProductDTO{
+		ID:                 p.ID,
+		BusinessID:         p.BusinessID,
+		Name:               p.Name,
+		Description:        NullStringToString(p.Description),
+		Price:              p.Price,
+		Currency:           p.Currency,
+		StockQuantity:      p.StockQuantity,
+		CategoryID:         NullStringToString(p.CategoryID),
+		BrandID:            NullStringToString(p.BrandID),
+		ModelID:            NullStringToString(p.ModelID),
+		ImageUrls:          p.ImageUrls,
+		Rating:             NullStringToString(p.Rating),
+		ReviewCount:        NullInt32ToInt32(p.ReviewCount),
+		IsFlashSale:        NullBoolToBool(p.IsFlashSale),
+		DiscountPercentage: NullStringToString(p.DiscountPercentage),
+		CreatedAt:          NullTimeToTime(p.CreatedAt),
+		UpdatedAt:          NullTimeToTime(p.UpdatedAt),
+		CategoryName:       NullStringToString(p.CategoryName),
+		BrandName:          NullStringToString(p.BrandName),
+		ModelName:          NullStringToString(p.ModelName),
+	}
+}
+
+func GetProductsByBusinessRowToDTO(p db.GetProductsByBusinessRow) ProductDTO {
 	return ProductDTO{
 		ID:                 p.ID,
 		BusinessID:         p.BusinessID,
@@ -224,7 +250,7 @@ func (h *EcommerceHandler) SearchProducts(c *gin.Context) {
 			var p db.Product
 			err := rows.Scan(
 				&p.ID, &p.BusinessID, &p.Name, &p.Description, &p.Price, &p.Currency,
-				&p.StockQuantity, &p.CategoryID, &p.BrandID, &p.ModelID, &p.ImageUrls,
+				&p.StockQuantity, &p.CategoryID, &p.BrandID, &p.ModelID, pq.Array(&p.ImageUrls),
 				&p.Rating, &p.ReviewCount, &p.IsFlashSale, &p.DiscountPercentage, &p.CreatedAt, &p.UpdatedAt,
 			)
 			if err != nil {
@@ -241,8 +267,9 @@ func (h *EcommerceHandler) SearchProducts(c *gin.Context) {
 	}
 }
 
-// ListProducts returns all products with pagination
+// ListProducts returns all products with pagination, optionally filtered by business_id
 func (h *EcommerceHandler) ListProducts(c *gin.Context) {
+	businessID := c.Query("business_id")
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
 
@@ -251,18 +278,33 @@ func (h *EcommerceHandler) ListProducts(c *gin.Context) {
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		products, err := qtx.GetProducts(c.Request.Context(), db.GetProductsParams{
-			Offset: int32(offset),
-			Limit:  int32(limit),
-		})
-		if err != nil {
-			return err
+		dtoList := make([]ProductDTO, 0)
+
+		if businessID != "" {
+			products, err := qtx.GetProductsByBusiness(c.Request.Context(), db.GetProductsByBusinessParams{
+				BusinessID: businessID,
+				Limit:      int32(limit),
+				Offset:     int32(offset),
+			})
+			if err != nil {
+				return err
+			}
+			for _, p := range products {
+				dtoList = append(dtoList, GetProductsByBusinessRowToDTO(p))
+			}
+		} else {
+			products, err := qtx.GetProducts(c.Request.Context(), db.GetProductsParams{
+				Limit:  int32(limit),
+				Offset: int32(offset),
+			})
+			if err != nil {
+				return err
+			}
+			for _, p := range products {
+				dtoList = append(dtoList, GetProductsRowToDTO(p))
+			}
 		}
 
-		dtoList := make([]ProductDTO, 0)
-		for _, p := range products {
-			dtoList = append(dtoList, GetProductsRowToDTO(p))
-		}
 		c.JSON(http.StatusOK, dtoList)
 		return nil
 	})

@@ -241,6 +241,15 @@ LEFT JOIN brands b ON p.brand_id = b.id
 LEFT JOIN product_models m ON p.model_id = m.id
 ORDER BY p.created_at DESC LIMIT $1 OFFSET $2;
 
+-- name: GetProductsByBusiness :many
+SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.business_id = $1
+ORDER BY p.created_at DESC LIMIT $2 OFFSET $3;
+
 -- name: GetProductByIDWithDetails :one
 SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
 FROM products p
