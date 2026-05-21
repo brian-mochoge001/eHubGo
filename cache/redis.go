@@ -11,6 +11,9 @@ import (
 type Store interface {
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	Get(ctx context.Context, key string) (string, error)
+	Incr(ctx context.Context, key string) (int64, error)
+	Publish(ctx context.Context, channel string, message interface{}) error
+	Subscribe(ctx context.Context, channel string) <-chan *redis.Message
 	Delete(ctx context.Context, key string) error
 	IsAvailable() bool
 }
@@ -60,6 +63,28 @@ func (s *RedisStore) Get(ctx context.Context, key string) (string, error) {
 		return "", redis.Nil // simulate cache miss
 	}
 	return s.client.Get(ctx, key).Result()
+}
+
+func (s *RedisStore) Incr(ctx context.Context, key string) (int64, error) {
+	if !s.active {
+		return 0, nil
+	}
+	return s.client.Incr(ctx, key).Result()
+}
+
+func (s *RedisStore) Publish(ctx context.Context, channel string, message interface{}) error {
+	if !s.active {
+		return nil
+	}
+	return s.client.Publish(ctx, channel, message).Err()
+}
+
+func (s *RedisStore) Subscribe(ctx context.Context, channel string) <-chan *redis.Message {
+	if !s.active {
+		return nil
+	}
+	pubsub := s.client.Subscribe(ctx, channel)
+	return pubsub.Channel()
 }
 
 func (s *RedisStore) Delete(ctx context.Context, key string) error {

@@ -8,19 +8,19 @@ import (
 )
 
 // AgeGateMiddleware enforces that the user is at least 20 years old.
-// Assumes DateOfBirth is available in user context or profile object.
+// Now securely fetches DOB from authenticated user context.
 func AgeGateMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Mock: In production, fetch DOB from DB or User Profile in context
-		dobStr := c.GetHeader("X-User-DOB") // Format: YYYY-MM-DD
-		if dobStr == "" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Date of birth required for age verification"})
+		dobVal, exists := c.Get("user_dob")
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Date of birth verification required. Please update your profile."})
 			return
 		}
 
+		dobStr := dobVal.(string)
 		dob, err := time.Parse("2006-01-02", dobStr)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid DOB format"})
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to process age verification"})
 			return
 		}
 

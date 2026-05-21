@@ -58,6 +58,7 @@ CREATE TABLE users (
     password_hash TEXT NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT,
+    date_of_birth DATE,
     phone_number TEXT UNIQUE,
     profile_picture_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"math/rand"
 
 	"ehubgo/db"
 	"github.com/gin-gonic/gin"
@@ -120,7 +119,7 @@ func (h *CinemaHandler) BookTicket(c *gin.Context) {
 		return
 	}
 
-	ticketNum := fmt.Sprintf("TCK-%d", rand.Intn(1000000))
+	ticketNum := fmt.Sprintf("TCK-%s", uuid.New().String()[:8])
 	qrCode := fmt.Sprintf("QR-%s", ticketNum)
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {

@@ -56,10 +56,11 @@ func AuthMiddleware(authClient *auth.Client, dbConn *sql.DB) gin.HandlerFunc {
 		authHeader := c.GetHeader("Authorization")
 
 		if authHeader == "" {
-			if os.Getenv("DEV_AUTH_BYPASS") == "true" {
+			if os.Getenv("DEV_AUTH_BYPASS") == "true" && os.Getenv("GO_ENV") != "production" {
 				c.Set("user_id", "test-user-id")
 				c.Set("user_email", "dev@example.com")
 				c.Set("user_roles", "executive_admin,admin,vendor,customer")
+				c.Set("user_dob", "2000-01-01")
 			}
 			c.Next()
 			return
@@ -74,11 +75,22 @@ func AuthMiddleware(authClient *auth.Client, dbConn *sql.DB) gin.HandlerFunc {
 
 		c.Set("user_id", token.UID)
 
-		// Optionally fetch roles from DB and set them. For simplicity, we fallback to standard role if not set.
-		var roles string
-		err = dbConn.QueryRowContext(c.Request.Context(), "SELECT string_agg(role::text, ',') FROM user_roles WHERE user_id = $1", token.UID).Scan(&roles)
-		if err == nil && roles != "" {
-			c.Set("user_roles", roles)
+		// Fetch roles and DOB from DB
+		var roles sql.NullString
+		var dob sql.NullTime
+		err = dbConn.QueryRowContext(c.Request.Context(), 
+			"SELECT (SELECT string_agg(role::text, ',') FROM user_roles WHERE user_id = $1), date_of_birth FROM users WHERE id = $1", 
+			token.UID).Scan(&roles, &dob)
+		
+		if err == nil {
+			if roles.Valid && roles.String != "" {
+				c.Set("user_roles", roles.String)
+			} else {
+				c.Set("user_roles", "user")
+			}
+			if dob.Valid {
+				c.Set("user_dob", dob.Time.Format("2006-01-02"))
+			}
 		} else {
 			c.Set("user_roles", "user") // default basic role
 		}
@@ -126,6 +138,7 @@ func main() {
 
 	// Initialize Infrastructure
 	redisStore := cache.NewRedisStore(os.Getenv("REDIS_URL"))
+	handlers.DriverHub = handlers.NewWsHub(redisStore)
 
 	workerPool := worker.NewPool(5, 100)
 	workerPool.Start()
@@ -146,6 +159,8 @@ func main() {
 	hostHandler := handlers.NewHostHandler(queries, conn)
 	c2cHandler := handlers.NewC2CHandler(queries, conn)
 	taxiHandler := handlers.NewTaxiHandler(queries, conn)
+
+	// DriverHub is initialized inside handlers package
 
 	// Specialized Miniservice Handlers
 	laundryHandler := handlers.NewLaundryHandler(queries, conn)
@@ -186,7 +201,11 @@ func main() {
 
 	r := gin.Default()
 	config := cors.DefaultConfig()
-	config.AllowAllOrigins = true
+	if os.Getenv("GO_ENV") == "production" {
+		config.AllowOrigins = strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",")
+	} else {
+		config.AllowAllOrigins = true
+	}
 	config.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
 	r.Use(cors.New(config))
 
@@ -195,7 +214,7 @@ func main() {
 	})
 
 	api := r.Group("/api/v1")
-	api.Use(middleware.RateLimitMiddleware())
+	api.Use(middleware.RateLimitMiddleware(redisStore))
 	api.Use(AuthMiddleware(authClient, conn))
 	{
 		// Feedback
@@ -227,6 +246,7 @@ func main() {
 
 		// Delivery Services
 		api.GET("/delivery/drivers/nearby", foodHandler.GetNearbyMotorbikeDrivers)
+		api.POST("/food/delivery/estimate", foodHandler.EstimateDelivery)
 		api.POST("/delivery/pricing/estimate", deliveryHandler.CalculateDeliveryQuote)
 		api.POST("/pricing/estimate", pricingHandler.GetPriceEstimate)
 
@@ -339,8 +359,19 @@ func main() {
 
 			// Taxi Operations
 			authRequired.POST("/taxi/location", taxiHandler.UpdateLocation)
+			authRequired.GET("/taxi/location", taxiHandler.GetDriverLocation)
 			authRequired.POST("/taxi/status", taxiHandler.UpdateStatus)
+			authRequired.GET("/taxi/driver/tasks", taxiHandler.GetDriverTasks)
+			authRequired.GET("/taxi/requests", taxiHandler.GetRideRequests)
+			// Delivery requests (platform deliveries: eFood, eGrocery, eLiquor)
+			authRequired.GET("/delivery/requests", taxiHandler.GetDeliveryRequests)
+			authRequired.POST("/delivery/driver/accept", taxiHandler.AcceptDeliveryRequest)
+			authRequired.POST("/delivery/driver/decline", taxiHandler.DeclineDeliveryRequest)
+			authRequired.POST("/taxi/driver/accept", taxiHandler.AcceptRideRequest)
+			authRequired.POST("/taxi/driver/decline", taxiHandler.DeclineRideRequest)
 			authRequired.POST("/taxi/request", taxiHandler.RequestRide)
+			// WebSocket for drivers
+			authRequired.GET("/ws/driver", taxiHandler.DriverWS)
 			authRequired.POST("/food/delivery/assign", foodHandler.AssignDelivery)
 
 			// Property Bookings

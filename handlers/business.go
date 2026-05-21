@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"ehubgo/db"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -26,14 +27,14 @@ func (h *BusinessHandler) RegisterBusiness(c *gin.Context) {
 	userID := c.MustGet("user_id").(string)
 
 	var req struct {
-		Name           string `json:"name" binding:"required"`
-		Description    string `json:"description"`
+		Name            string `json:"name" binding:"required"`
+		Description     string `json:"description"`
 		MiniserviceType string `json:"miniservice_type" binding:"required"` // liquor, hotel, etc.
-		LogoURL        string `json:"logo_url"`
-		BannerURL      string `json:"banner_url"`
-		PhoneNumber    string `json:"phone_number"`
-		Email          string `json:"email"`
-		AddressID      string `json:"address_id"`
+		LogoURL         string `json:"logo_url"`
+		BannerURL       string `json:"banner_url"`
+		PhoneNumber     string `json:"phone_number"`
+		Email           string `json:"email"`
+		AddressID       string `json:"address_id"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -98,17 +99,19 @@ func (h *BusinessHandler) GetMyMall(c *gin.Context) {
 // ListBusinesses returns all businesses, optionally filtered by type
 func (h *BusinessHandler) ListBusinesses(c *gin.Context) {
 	businessType := c.Query("type")
+	ownerID := c.Query("owner_id")
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		var businesses []db.Business
 		var err error
 
-		if businessType != "" {
+		if ownerID != "" {
+			businesses, err = qtx.GetBusinessesByOwnerID(c.Request.Context(), ownerID)
+		} else if businessType != "" {
 			businesses, err = qtx.ListBusinessesByType(c.Request.Context(), businessType)
 		} else {
-			// If no type, we might want to list all approved ones
-			// For now, reuse ListBusinessesByType with empty or add a ListAllApproved
+			// If no type or owner filter, return all businesses for now.
 			businesses, err = qtx.ListBusinessesByType(c.Request.Context(), businessType)
 		}
 

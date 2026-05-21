@@ -372,8 +372,8 @@ INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING RE
 SELECT * FROM users WHERE email = $1;
 
 -- name: CreateUser :one
-INSERT INTO users (id, email, password_hash, first_name, last_name, phone_number, profile_picture_url)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO users (id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- Hubs

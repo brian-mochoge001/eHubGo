@@ -101,10 +101,12 @@ func main() {
 	if err != nil {
 		if err == sql.ErrNoRows {
 			dbUser, err = queries.CreateUser(ctx, db.CreateUserParams{
+				ID:                uuid.New().String(),
 				Email:             email,
 				PasswordHash:      string(hashedPassword),
 				FirstName:         firstName,
 				LastName:          sql.NullString{String: lastName, Valid: true},
+				DateOfBirth:       sql.NullTime{Time: time.Date(1990, 1, 1, 0, 0, 0, 0, time.UTC), Valid: true},
 				PhoneNumber:       sql.NullString{String: "", Valid: false},
 				ProfilePictureUrl: sql.NullString{String: "", Valid: false},
 			})

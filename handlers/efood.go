@@ -3,9 +3,12 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 
 	"ehubgo/db"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -101,6 +104,91 @@ func (h *FoodHandler) GetNearbyMotorbikeDrivers(c *gin.Context) {
 			return err
 		}
 		c.JSON(http.StatusOK, drivers)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+func parseDistanceMeters(distance interface{}) float64 {
+	switch d := distance.(type) {
+	case float64:
+		return d
+	case float32:
+		return float64(d)
+	case int:
+		return float64(d)
+	case int64:
+		return float64(d)
+	case int32:
+		return float64(d)
+	case string:
+		if f, err := strconv.ParseFloat(d, 64); err == nil {
+			return f
+		}
+	case []byte:
+		if f, err := strconv.ParseFloat(string(d), 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+func (h *FoodHandler) EstimateDelivery(c *gin.Context) {
+	var req struct {
+		Latitude  float64 `json:"latitude" binding:"required"`
+		Longitude float64 `json:"longitude" binding:"required"`
+		Radius    float64 `json:"radius"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Radius <= 0 {
+		req.Radius = 60000 // 60km max food delivery coverage
+	}
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		drivers, err := qtx.GetNearbyMotorbikeDrivers(c.Request.Context(), db.GetNearbyMotorbikeDriversParams{
+			StMakepoint:   req.Longitude,
+			StMakepoint_2: req.Latitude,
+			StDwithin:     req.Radius,
+			Limit:         10,
+		})
+		if err != nil {
+			return err
+		}
+
+		nearestDistance := math.Inf(1)
+		for _, driver := range drivers {
+			distance := parseDistanceMeters(driver.Distance)
+			if distance > 0 && distance < nearestDistance {
+				nearestDistance = distance
+			}
+		}
+		if math.IsInf(nearestDistance, 1) {
+			nearestDistance = req.Radius
+		}
+
+		estimatedMinutes := int(math.Ceil((nearestDistance / 1000.0) / 30.0 * 60.0))
+		if estimatedMinutes < 10 {
+			estimatedMinutes = 10
+		}
+
+		available := len(drivers) > 0 && estimatedMinutes <= 120
+		c.JSON(http.StatusOK, gin.H{
+			"available":                 available,
+			"driver_count":              len(drivers),
+			"nearest_driver_distance_m": nearestDistance,
+			"estimated_minutes":         estimatedMinutes,
+			"max_minutes_allowed":       120,
+			"note":                      "Only motorbike drivers are eligible for food delivery.",
+		})
 		return nil
 	})
 

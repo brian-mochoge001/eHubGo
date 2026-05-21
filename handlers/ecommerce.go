@@ -10,6 +10,7 @@ import (
 
 	"ehubgo/cache"
 	"ehubgo/db"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -136,9 +137,9 @@ func GetProductByIDRowToDTO(p db.GetProductByIDWithDetailsRow) ProductDTO {
 func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
-	
+
 	cacheKey := fmt.Sprintf("featured_products:%s:%s", limitStr, offsetStr)
-	
+
 	if h.Cache != nil && h.Cache.IsAvailable() {
 		if cachedData, err := h.Cache.Get(c.Request.Context(), cacheKey); err == nil {
 			c.Data(http.StatusOK, "application/json", []byte(cachedData))
@@ -163,12 +164,12 @@ func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 		for _, p := range products {
 			dtoList = append(dtoList, ToProductDTO(p))
 		}
-		
+
 		if h.Cache != nil && h.Cache.IsAvailable() {
 			jsonBytes, _ := json.Marshal(dtoList)
 			h.Cache.Set(c.Request.Context(), cacheKey, jsonBytes, 5*time.Minute)
 		}
-		
+
 		c.JSON(http.StatusOK, dtoList)
 		return nil
 	})
@@ -244,7 +245,7 @@ func (h *EcommerceHandler) SearchProducts(c *gin.Context) {
 func (h *EcommerceHandler) ListProducts(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
-	
+
 	limit, _ := strconv.Atoi(limitStr)
 	offset, _ := strconv.Atoi(offsetStr)
 
@@ -939,6 +940,10 @@ func (h *EcommerceHandler) Checkout(c *gin.Context) {
 		return
 	}
 
+	var notifyDriverUserID string
+	var notifyDriverUserIDs []string
+	var notifyPayload interface{}
+
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 
@@ -1006,12 +1011,81 @@ func (h *EcommerceHandler) Checkout(c *gin.Context) {
 			return err
 		}
 
+		// Determine if this order requires delivery (food/grocery/liquor)
+		isDelivery := false
+		var pickupLng, pickupLat float64
+		for _, item := range cartItems {
+			var miniservice sql.NullString
+			var lng, lat sql.NullFloat64
+			if err := tx.QueryRowContext(c.Request.Context(), `SELECT b.miniservice_type, a.longitude, a.latitude FROM businesses b JOIN addresses a ON a.id = b.address_id WHERE b.id = $1 LIMIT 1`, item.BusinessID).Scan(&miniservice, &lng, &lat); err == nil {
+				if miniservice.Valid && (miniservice.String == "food" || miniservice.String == "grocery" || miniservice.String == "liquor") {
+					isDelivery = true
+					if lng.Valid && lat.Valid {
+						pickupLng = lng.Float64
+						pickupLat = lat.Float64
+					}
+					break
+				}
+			}
+		}
+
+		if isDelivery {
+			// Try to auto-assign the nearest motorbike driver
+			drivers, dErr := qtx.GetNearbyMotorbikeDrivers(c.Request.Context(), db.GetNearbyMotorbikeDriversParams{
+				StMakepoint:   pickupLng,
+				StMakepoint_2: pickupLat,
+				StDwithin:     5000,
+				Limit:         10,
+			})
+			if dErr == nil && len(drivers) > 0 {
+				// assign the nearest
+				drv := drivers[0]
+				_, aErr := qtx.AssignDriverToOrder(c.Request.Context(), db.AssignDriverToOrderParams{
+					ID:          orderID,
+					DriverID:    sql.NullString{String: drv.ID, Valid: true},
+					DeliveryFee: fmt.Sprintf("%.2f", 0.00),
+				})
+				if aErr == nil {
+					// notify the assigned driver after tx
+					notifyDriverUserID = drv.UserID
+					notifyPayload = gin.H{"type": "delivery_assigned", "order": order}
+				}
+			} else {
+				// No auto-assign; mark as requested and broadcast to nearby motorbike drivers
+				if _, uErr := tx.ExecContext(c.Request.Context(), `UPDATE orders SET status='requested', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, orderID); uErr == nil {
+					// gather nearby drivers to notify
+					if dlist, dlErr := qtx.GetNearbyMotorbikeDrivers(c.Request.Context(), db.GetNearbyMotorbikeDriversParams{
+						StMakepoint:   pickupLng,
+						StMakepoint_2: pickupLat,
+						StDwithin:     5000,
+						Limit:         20,
+					}); dlErr == nil {
+						for _, d := range dlist {
+							notifyDriverUserIDs = append(notifyDriverUserIDs, d.UserID)
+						}
+						notifyPayload = gin.H{"type": "delivery_request", "order": order}
+					}
+				}
+			}
+		}
+
 		c.JSON(http.StatusCreated, order)
 		return nil
 	})
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// After transaction commit, notify drivers (best-effort)
+	if DriverHub != nil {
+		if notifyDriverUserID != "" {
+			DriverHub.SendToDriver(notifyDriverUserID, notifyPayload)
+		}
+		if len(notifyDriverUserIDs) > 0 {
+			DriverHub.BroadcastToDrivers(notifyDriverUserIDs, notifyPayload)
+		}
 	}
 }
 
