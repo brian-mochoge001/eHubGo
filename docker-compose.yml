@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis:6379
+      - PORT=8080
+      - APP_RUNTIME_SIGNATURE=infinnitydevelopers_go_by_me
+      - FIREBASE_SERVICE_ACCOUNT_PATH=./service-account.json
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./.env:/app/.env
+      - ./service-account.json:/app/service-account.json
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"ehubgo/db"
 	"github.com/gin-gonic/gin"
@@ -101,4 +102,34 @@ func (h *UserHandler) ListBills(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
+}
+
+func (h *UserHandler) GetMe(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	uid := userID.(string)
+
+	var user struct {
+		ID         string `json:"id"`
+		Email      string `json:"email"`
+		FirstName  string `json:"first_name"`
+		LastName   string `json:"last_name"`
+		ProfileUrl string `json:"profile_picture_url"`
+	}
+
+	err := h.DB.QueryRowContext(c.Request.Context(),
+		"SELECT id, email, first_name, COALESCE(last_name, ''), COALESCE(profile_picture_url, '') FROM users WHERE id = $1",
+		uid).Scan(&user.ID, &user.Email, &user.FirstName, &user.LastName, &user.ProfileUrl)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to map identity"})
+		return
+	}
+
+	rolesStr, _ := c.Get("user_roles")
+	roles := strings.Split(rolesStr.(string), ",")
+
+	c.JSON(http.StatusOK, gin.H{
+		"user":  user,
+		"roles": roles,
+	})
 }
