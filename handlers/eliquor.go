@@ -50,3 +50,55 @@ func (h *LiquorHandler) ListLiquorItems(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 }
+
+func (h *LiquorHandler) SearchLiquorStores(c *gin.Context) {
+	var params struct {
+		Latitude  float64 `form:"latitude" binding:"required"`
+		Longitude float64 `form:"longitude" binding:"required"`
+		Radius    float64 `form:"radius" binding:"required"`
+	}
+
+	if err := c.ShouldBindQuery(&params); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		stores, err := qtx.SearchStoresByLocation(c.Request.Context(), db.SearchStoresByLocationParams{
+			StMakepoint:     params.Longitude,
+			StMakepoint_2:   params.Latitude,
+			Column3:         []string{"liquor"},
+			StDwithin:       params.Radius,
+		})
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusOK, []interface{}{})
+				return nil
+			}
+			return err
+		}
+
+		var results []gin.H
+		for _, store := range stores {
+			storeLat := ParseCoordinate(store.Latitude)
+			storeLng := ParseCoordinate(store.Longitude)
+
+			results = append(results, gin.H{
+				"business": store,
+				"polyline": GetPointToPointRoute(c.Request.Context(), params.Latitude, params.Longitude, storeLat, storeLng),
+			})
+		}
+
+		if len(results) == 0 {
+			c.JSON(http.StatusOK, []interface{}{})
+		} else {
+			c.JSON(http.StatusOK, results)
+		}
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}

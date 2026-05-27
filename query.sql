@@ -76,13 +76,13 @@ WHERE g.is_available = TRUE;
 -- name: ListGroceryItemsByBusiness :many
 SELECT * FROM grocery_items WHERE business_id = $1 AND is_available = TRUE;
 
--- name: SearchGroceryStoresByLocation :many
-SELECT DISTINCT b.*, a.city, a.address_line1, ST_Distance(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326), ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+-- name: SearchStoresByLocation :many
+SELECT DISTINCT b.*, a.city, a.address_line1, a.longitude, a.latitude, ST_Distance(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326), ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
 FROM businesses b
 JOIN addresses a ON b.address_id = a.id
-WHERE b.miniservice_type = 'grocery' 
+WHERE b.miniservice_type = ANY($3::text[])
 AND b.verification_status = 'approved'
-AND ST_DWithin(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326), ST_SetSRID(ST_MakePoint($1, $2), 4326), $3)
+AND ST_DWithin(ST_SetSRID(ST_MakePoint(a.longitude, a.latitude), 4326), ST_SetSRID(ST_MakePoint($1, $2), 4326), $4)
 ORDER BY distance;
 
 -- Liquor
@@ -346,7 +346,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: GetNearbyMotorbikeDrivers :many
-SELECT d.*, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+SELECT d.*, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
 FROM drivers d
 JOIN vehicle_types vt ON d.vehicle_type_id = vt.id
 WHERE d.status = 'online' 
@@ -568,7 +568,7 @@ UPDATE drivers SET last_location = ST_SetSRID(ST_MakePoint($2, $3), 4326), updat
 UPDATE drivers SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING *;
 
 -- name: GetNearbyDrivers :many
-SELECT *, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+SELECT *, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
 FROM drivers
 WHERE status = 'online' AND ST_DWithin(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326), $3)
 ORDER BY distance LIMIT $4;

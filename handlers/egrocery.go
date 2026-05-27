@@ -22,9 +22,9 @@ func NewGroceryHandler(queries *db.Queries, dbConn *sql.DB) *GroceryHandler {
 
 func (h *GroceryHandler) SearchGroceryStores(c *gin.Context) {
 	var params struct {
-		Longitude float64 `form:"longitude" binding:"required"`
 		Latitude  float64 `form:"latitude" binding:"required"`
-		Radius    float64 `form:"radius,default=5000"` // default 5km
+		Longitude float64 `form:"longitude" binding:"required"`
+		Radius    float64 `form:"radius" binding:"required"`
 	}
 
 	if err := c.ShouldBindQuery(&params); err != nil {
@@ -34,17 +34,39 @@ func (h *GroceryHandler) SearchGroceryStores(c *gin.Context) {
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		stores, err := qtx.SearchGroceryStoresByLocation(c.Request.Context(), db.SearchGroceryStoresByLocationParams{
+		stores, err := qtx.SearchStoresByLocation(c.Request.Context(), db.SearchStoresByLocationParams{
 			StMakepoint:   params.Longitude,
 			StMakepoint_2: params.Latitude,
+			Column3:       []string{"grocery"},
 			StDwithin:     params.Radius,
 		})
 		if err != nil {
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusOK, []interface{}{})
+				return nil
+			}
 			return err
 		}
-		c.JSON(http.StatusOK, stores)
+
+		var results []gin.H
+		for _, store := range stores {
+			storeLat := ParseCoordinate(store.Latitude)
+			storeLng := ParseCoordinate(store.Longitude)
+
+			results = append(results, gin.H{
+				"business": store,
+				"polyline": GetPointToPointRoute(c.Request.Context(), params.Latitude, params.Longitude, storeLat, storeLng),
+			})
+		}
+
+		if len(results) == 0 {
+			c.JSON(http.StatusOK, []interface{}{})
+		} else {
+			c.JSON(http.StatusOK, results)
+		}
 		return nil
 	})
+
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

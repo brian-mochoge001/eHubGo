@@ -37,12 +37,15 @@ func (h *TaxiHandler) UpdateLocation(c *gin.Context) {
 		return
 	}
 
+	// Snap coordinates to the nearest road node
+	snappedLat, snappedLng := SnapToRoad(c.Request.Context(), req.Latitude, req.Longitude)
+
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		driver, err := qtx.UpdateDriverLocation(c.Request.Context(), db.UpdateDriverLocationParams{
 			UserID:        userID,
-			StMakepoint:   req.Longitude,
-			StMakepoint_2: req.Latitude,
+			StMakepoint:   snappedLng,
+			StMakepoint_2: snappedLat,
 		})
 		if err != nil {
 			return err
@@ -218,6 +221,7 @@ func (h *TaxiHandler) GetDriverTasks(c *gin.Context) {
 				"customer_name":    firstName + " " + lastName,
 				"pickup_location":  gin.H{"latitude": pickupLat, "longitude": pickupLng},
 				"dropoff_location": gin.H{"latitude": dropoffLat, "longitude": dropoffLng},
+				"polyline":         GetPointToPointRoute(c.Request.Context(), pickupLat, pickupLng, dropoffLat, dropoffLng),
 				"accepted_at":      acceptedAt,
 				"started_at":       startedAt,
 				"completed_at":     completedAt,
@@ -271,6 +275,7 @@ func (h *TaxiHandler) GetRideRequests(c *gin.Context) {
 				"customer_name":    firstName + " " + lastName,
 				"pickup_location":  gin.H{"latitude": pickupLat, "longitude": pickupLng},
 				"dropoff_location": gin.H{"latitude": dropoffLat, "longitude": dropoffLng},
+				"polyline":         GetPointToPointRoute(c.Request.Context(), pickupLat, pickupLng, dropoffLat, dropoffLng),
 				"distance_m":       distance,
 			})
 		}
@@ -549,7 +554,7 @@ func (h *TaxiHandler) RequestRide(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	var createdTrip interface{}
+	var createdTrip gin.H
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		trip, err := qtx.CreateTaxiTrip(c.Request.Context(), db.CreateTaxiTripParams{
@@ -565,8 +570,11 @@ func (h *TaxiHandler) RequestRide(c *gin.Context) {
 		if err != nil {
 			return err
 		}
-		createdTrip = trip
-		c.JSON(http.StatusCreated, trip)
+		createdTrip = gin.H{
+			"trip":     trip,
+			"polyline": GetPointToPointRoute(c.Request.Context(), req.PickupLat, req.PickupLng, req.DropoffLat, req.DropoffLng),
+		}
+		c.JSON(http.StatusCreated, createdTrip)
 		return nil
 	})
 

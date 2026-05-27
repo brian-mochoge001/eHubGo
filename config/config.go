@@ -16,6 +16,8 @@ type Config struct {
 	DevAuthBypass              bool
 	FirebaseServiceAccountJSON string
 	FirebaseServiceAccountPath string
+	JWTSecret                  string
+	JWTExpiryMinutes           int
 	Port                       string
 }
 
@@ -47,6 +49,8 @@ func Load() (*Config, error) {
 		DevAuthBypass:              viper.GetBool("DEV_AUTH_BYPASS"),
 		FirebaseServiceAccountJSON: viper.GetString("FIREBASE_SERVICE_ACCOUNT_JSON"),
 		FirebaseServiceAccountPath: viper.GetString("FIREBASE_SERVICE_ACCOUNT_PATH"),
+		JWTSecret:                  viper.GetString("JWT_SECRET"),
+		JWTExpiryMinutes:           viper.GetInt("JWT_EXPIRY_MINUTES"),
 		Port:                       viper.GetString("PORT"),
 	}, nil
 }

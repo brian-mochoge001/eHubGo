@@ -165,12 +165,19 @@ func (h *FoodHandler) EstimateDelivery(c *gin.Context) {
 		}
 
 		nearestDistance := math.Inf(1)
+		var nearestDriverLat, nearestDriverLng float64
+		hasNearest := false
+
 		for _, driver := range drivers {
 			distance := parseDistanceMeters(driver.Distance)
 			if distance > 0 && distance < nearestDistance {
 				nearestDistance = distance
+				nearestDriverLat = ParseCoordinate(driver.Latitude)
+				nearestDriverLng = ParseCoordinate(driver.Longitude)
+				hasNearest = true
 			}
 		}
+
 		if math.IsInf(nearestDistance, 1) {
 			nearestDistance = req.Radius
 		}
@@ -180,15 +187,22 @@ func (h *FoodHandler) EstimateDelivery(c *gin.Context) {
 			estimatedMinutes = 10
 		}
 
+		var polylineStr string
+		if hasNearest {
+			polylineStr = GetPointToPointRoute(c.Request.Context(), nearestDriverLat, nearestDriverLng, req.Latitude, req.Longitude)
+		}
+
 		available := len(drivers) > 0 && estimatedMinutes <= 120
 		c.JSON(http.StatusOK, gin.H{
 			"available":                 available,
 			"driver_count":              len(drivers),
 			"nearest_driver_distance_m": nearestDistance,
 			"estimated_minutes":         estimatedMinutes,
+			"polyline":                  polylineStr,
 			"max_minutes_allowed":       120,
 			"note":                      "Only motorbike drivers are eligible for food delivery.",
 		})
+
 		return nil
 	})
 

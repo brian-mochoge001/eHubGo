@@ -42,11 +42,20 @@ func (h *DeliveryHandler) CalculateDeliveryQuote(c *gin.Context) {
 		Distance         float64 `json:"distance" binding:"required"`
 		IsPeakHour       bool    `json:"is_peak_hour"`
 		WeatherSurcharge float64 `json:"weather_surcharge"`
+		PickupLat        float64 `json:"pickup_lat"`
+		PickupLng        float64 `json:"pickup_lng"`
+		DropoffLat       float64 `json:"dropoff_lat"`
+		DropoffLng       float64 `json:"dropoff_lng"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	var polylineStr string
+	if req.PickupLat != 0 && req.DropoffLat != 0 {
+		polylineStr = GetPointToPointRoute(c.Request.Context(), req.PickupLat, req.PickupLng, req.DropoffLat, req.DropoffLng)
 	}
 
 	if req.Distance < 25.0 {
@@ -63,12 +72,15 @@ func (h *DeliveryHandler) CalculateDeliveryQuote(c *gin.Context) {
 			"type":            "internal",
 			"estimated_price": price,
 			"currency":        "Ksh",
+			"polyline":        polylineStr,
 		})
 	} else {
 		// Long distance: Suggest courier companies
 		c.JSON(http.StatusOK, gin.H{
-			"type":    "courier_required",
-			"message": "Distance requires specialized courier service. Please select from available courier partners.",
+			"type":     "courier_required",
+			"message":  "Distance requires specialized courier service. Please select from available courier partners.",
+			"polyline": polylineStr,
 		})
 	}
 }
+

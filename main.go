@@ -101,7 +101,14 @@ func main() {
 		sugar.Fatalw("Failed to initialize RBAC enforcer", "error", err)
 	}
 
-	// DriverHub is initialized inside handlers package
+	// Validate JWT configuration
+	jwtSecret := cfg.JWTSecret
+	if jwtSecret == "" {
+		sugar.Fatal("JWT_SECRET must be set in environment")
+	}
+	if cfg.JWTExpiryMinutes <= 0 {
+		cfg.JWTExpiryMinutes = 60 // default 1 hour
+	}
 
 	var opts []option.ClientOption
 	if serviceAccountJSON := cfg.FirebaseServiceAccountJSON; serviceAccountJSON != "" {
@@ -139,7 +146,7 @@ func main() {
 	api.Use(middleware.AuthMiddleware(authClient, conn))
 
 	// Build handlers registry and register routes
-	handlersReg := handlers.NewRegistry(queries, conn, redisStore)
+	handlersReg := handlers.NewRegistry(queries, conn, redisStore, []byte(jwtSecret), cfg.JWTExpiryMinutes)
 	handlers.RegisterRoutes(api, handlersReg, rbacEnforcer, redisStore)
 
 	// Admin API with Swagger Documentation

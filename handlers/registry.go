@@ -12,6 +12,7 @@ import (
 )
 
 type Registry struct {
+    Auth       *AuthHandler
     Business   *BusinessHandler
     User       *UserHandler
     Ecommerce  *EcommerceHandler
@@ -43,8 +44,9 @@ type Registry struct {
 }
 
 // NewRegistry constructs all handlers used by the application.
-func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store) *Registry {
+func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, jwtKey []byte, jwtExpiryMinutes int) *Registry {
     return &Registry{
+        Auth:      NewAuthHandler(queries, dbConn, jwtKey, jwtExpiryMinutes),
         Business:  NewBusinessHandler(queries, dbConn),
         User:      NewUserHandler(queries, dbConn),
         Ecommerce: NewEcommerceHandler(queries, dbConn, redisStore),
@@ -78,6 +80,10 @@ func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store) *R
 
 // RegisterRoutes registers all API routes onto the provided router group.
 func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforcer, redisStore cache.Store) {
+    // Public auth routes
+    api.POST("/auth/login", reg.Auth.Login)
+    api.POST("/auth/register", reg.Auth.Register)
+    
     // Public routes
     api.POST("/feedback", reg.Feedback.SubmitFeedback)
 
@@ -92,8 +98,10 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
     api.GET("/models", reg.Ecommerce.ListProductModels)
 
     api.GET("/groceries", reg.Grocery.ListGroceryItems)
+    api.GET("/grocery/stores", reg.Grocery.SearchGroceryStores)
     api.POST("/groceries/delivery/estimate", reg.Grocery.CalculateGroceryDeliveryQuote)
     api.GET("/liquor", reg.Liquor.ListLiquorItems)
+    api.GET("/liquor/stores", reg.Liquor.SearchLiquorStores)
     api.GET("/pharmacy", reg.Health.ListPharmacyItems)
     api.GET("/food-items", reg.Food.ListAllFoodItems)
     api.GET("/food-items/:id", reg.Food.GetFoodItem)

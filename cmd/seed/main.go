@@ -12,7 +12,6 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
@@ -101,7 +100,7 @@ func main() {
 	if err != nil {
 		if err == sql.ErrNoRows {
 			dbUser, err = queries.CreateUser(ctx, db.CreateUserParams{
-				ID:                uuid.New().String(),
+				ID:                fbUser.UID, // Sync ID with Firebase UID
 				Email:             email,
 				PasswordHash:      string(hashedPassword),
 				FirstName:         firstName,
@@ -130,181 +129,5 @@ func main() {
 		fmt.Printf("Note: Role assignment might already exist or failed: %v\n", err)
 	}
 
-	// 5. Seed Categories
-	categories := []string{"Electronics", "Groceries", "Pharmacy", "Food", "Repair", "Cleaning", "Laundry", "Bus", "Cinema", "Flights", "Travel", "Jobs", "Stays"}
-	for _, catName := range categories {
-		_, _ = queries.CreateHub(ctx, db.CreateHubParams{
-			ID:          uuid.New().String(),
-			Name:        catName,
-			Description: fmt.Sprintf("All services related to %s", catName),
-		})
-		// Actually create in categories table if needed
-		_, _ = conn.ExecContext(ctx, "INSERT INTO categories (id, name) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING", uuid.New().String(), catName)
-	}
-
-	// 6. Seed Brands
-	brands := []struct{ name, logo string }{
-		{"Apple", "https://logo.clearbit.com/apple.com"},
-		{"Samsung", "https://logo.clearbit.com/samsung.com"},
-		{"Coca-Cola", "https://logo.clearbit.com/cocacola.com"},
-	}
-	for _, b := range brands {
-		_, _ = queries.CreateBrand(ctx, db.CreateBrandParams{
-			ID:      uuid.New().String(),
-			Name:    b.name,
-			LogoUrl: sql.NullString{String: b.logo, Valid: true},
-		})
-	}
-
-	// 7. Seed Businesses
-	businessTypes := []struct{ name, mtype string }{
-		{"eHub Grocery Store", "grocery"},
-		{"eHub Pharmacy", "pharmacy"},
-		{"eHub Eats", "restaurant"},
-		{"FixIt Pro", "repair"},
-		{"Green Clean", "cleaning"},
-		{"Fresh Wash", "laundry"},
-		{"Nairobi Bus Express", "bus"},
-		{"Galaxy Cinema", "cinema"},
-		{"SkyTravel", "flights"},
-		{"Safari Tours", "travel"},
-		{"Modern Stays", "hotel"},
-	}
-	
-	businessIDs := make(map[string]string)
-	for _, bt := range businessTypes {
-		biz, err := queries.CreateBusiness(ctx, db.CreateBusinessParams{
-			ID:              uuid.New().String(),
-			OwnerID:         dbUser.ID,
-			Name:            bt.name,
-			MiniserviceType: bt.mtype,
-			Description:     sql.NullString{String: fmt.Sprintf("The best %s in town", bt.mtype), Valid: true},
-		})
-		if err == nil {
-			businessIDs[bt.mtype] = biz.ID
-			// Set as approved
-			_, _ = queries.UpdateBusinessStatus(ctx, db.UpdateBusinessStatusParams{
-				ID:                 biz.ID,
-				VerificationStatus: db.NullBusinessVerificationStatus{BusinessVerificationStatus: db.BusinessVerificationStatusApproved, Valid: true},
-			})
-		}
-	}
-
-	// 8. Seed Specific Items
-	// Ecommerce Products
-	ecommerceBusinessID := ""
-	// Use grocery or restaurant as a fallback if no "ecommerce" type is defined yet
-	if id, ok := businessIDs["grocery"]; ok {
-		ecommerceBusinessID = id
-	}
-
-	if ecommerceBusinessID != "" {
-		products := []struct {
-			name        string
-			price       string
-			description string
-			image       string
-		}{
-			{"iPhone 15 Pro", "180000.00", "Titanium design, A17 Pro chip.", "https://alephksa.com/cdn/shop/files/iPhone_15_Pro_Natural_Titanium_PDP_Image_Position-1__en-ME.jpg?v=1694758467&width=1445"},
-			{"AirPods Pro (2nd Gen)", "22500.00", "Active Noise Cancellation.", "https://applecenter.co.ke/wp-content/uploads/2023/11/MTJV3.jpeg"},
-			{"Samsung Galaxy S24 Ultra", "159999.00", "Galaxy AI is here.", "https://kulan.co.ke/wp-content/uploads/2025/01/Samsung-Galaxy-S24-Ultra-256GB-East-Africa.jpg"},
-		}
-
-		for _, p := range products {
-			_, _ = queries.CreateProduct(ctx, db.CreateProductParams{
-				ID:            uuid.New().String(),
-				BusinessID:    ecommerceBusinessID,
-				Name:          p.name,
-				Price:         p.price,
-				Currency:      "Ksh",
-				Description:   sql.NullString{String: p.description, Valid: true},
-				StockQuantity: 10,
-				Rating:        sql.NullString{String: "4.5", Valid: true},
-			})
-		}
-	}
-
-	// Groceries
-	if id, ok := businessIDs["grocery"]; ok {
-		_, _ = queries.CreateGroceryItem(ctx, db.CreateGroceryItemParams{
-			ID:            uuid.New().String(),
-			BusinessID:    id,
-			Name:          "Fresh Whole Milk",
-			Price:         "150.00",
-			Currency:      "Ksh",
-			Unit:          sql.NullString{String: "1L", Valid: true},
-			StockQuantity: 100,
-			IsAvailable:   sql.NullBool{Bool: true, Valid: true},
-		})
-	}
-
-	// Pharmacy
-	if id, ok := businessIDs["pharmacy"]; ok {
-		_, _ = queries.CreatePharmacyItem(ctx, db.CreatePharmacyItemParams{
-			ID:            uuid.New().String(),
-			BusinessID:    id,
-			Name:          "Paracetamol",
-			Price:         "200.00",
-			Currency:      "Ksh",
-			StockQuantity: 50,
-			IsAvailable:   sql.NullBool{Bool: true, Valid: true},
-		})
-	}
-
-	// Food
-	if id, ok := businessIDs["restaurant"]; ok {
-		_, _ = queries.CreateFoodItem(ctx, db.CreateFoodItemParams{
-			ID:          uuid.New().String(),
-			BusinessID:  id,
-			Name:        "Margherita Pizza",
-			Price:       "1200.00",
-			Currency:    "Ksh",
-			IsAvailable: sql.NullBool{Bool: true, Valid: true},
-		})
-	}
-
-	// Services
-	if id, ok := businessIDs["repair"]; ok {
-		_, _ = queries.CreateService(ctx, db.CreateServiceParams{
-			ID:          uuid.New().String(),
-			BusinessID:  id,
-			ServiceType: "repair",
-			Name:        "iPhone Screen Repair",
-			BasePrice:   "5000.00",
-			Currency:    "Ksh",
-		})
-	}
-
-	// Bus
-	if id, ok := businessIDs["bus"]; ok {
-		_, _ = queries.CreateBusRoute(ctx, db.CreateBusRouteParams{
-			ID:             uuid.New().String(),
-			BusinessID:     id,
-			Origin:         "Nairobi",
-			Destination:    "Mombasa",
-			DepartureTime:  time.Now().Add(24 * time.Hour),
-			Price:          "1500.00",
-			Currency:       "Ksh",
-			AvailableSeats: 40,
-			BusType:        sql.NullString{String: "Executive", Valid: true},
-		})
-	}
-
-	// Cinema
-	_, _ = queries.CreateMovie(ctx, db.CreateMovieParams{
-		ID:           uuid.New().String(),
-		Title:        "The Batman",
-		IsNowPlaying: sql.NullBool{Bool: true, Valid: true},
-		Rating:       sql.NullString{String: "4.8", Valid: true},
-	})
-
-	// Driver & Taxi
-	_, _ = queries.CreateDriver(ctx, db.CreateDriverParams{
-		ID:     uuid.New().String(),
-		UserID: dbUser.ID,
-		Name:   "John Taxi",
-		Status: "online",
-	})
-
-	fmt.Println("Seeding completed successfully!")
+	fmt.Println("Essential seeding completed successfully!")
 }
