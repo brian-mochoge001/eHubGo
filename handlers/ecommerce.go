@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -164,19 +163,21 @@ func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
 
-	cacheKey := fmt.Sprintf("featured_products:%s:%s", limitStr, offsetStr)
+	cacheKey := fmt.Sprintf("ecommerce:featured:%s:%s", limitStr, offsetStr)
+	var dtoList []ProductDTO
 
-	if h.Cache != nil && h.Cache.IsAvailable() {
-		if cachedData, err := h.Cache.Get(c.Request.Context(), cacheKey); err == nil {
-			c.Data(http.StatusOK, "application/json", []byte(cachedData))
-			return
-		}
+	// 1. Try to get from cache
+	found, err := h.Cache.GetJSON(c.Request.Context(), cacheKey, &dtoList)
+	if err == nil && found {
+		c.JSON(http.StatusOK, dtoList)
+		return
 	}
 
 	limit, _ := strconv.Atoi(limitStr)
 	offset, _ := strconv.Atoi(offsetStr)
 
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+	// 2. Cache miss: Get from database
+	err = WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		products, err := qtx.GetFeaturedProducts(c.Request.Context(), db.GetFeaturedProductsParams{
 			Offset: int32(offset),
@@ -186,23 +187,22 @@ func (h *EcommerceHandler) ListFeaturedProducts(c *gin.Context) {
 			return err
 		}
 
-		dtoList := make([]ProductDTO, 0)
+		dtoList = make([]ProductDTO, 0)
 		for _, p := range products {
 			dtoList = append(dtoList, ToProductDTO(p))
 		}
-
-		if h.Cache != nil && h.Cache.IsAvailable() {
-			jsonBytes, _ := json.Marshal(dtoList)
-			h.Cache.Set(c.Request.Context(), cacheKey, jsonBytes, 5*time.Minute)
-		}
-
-		c.JSON(http.StatusOK, dtoList)
 		return nil
 	})
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
+
+	// 3. Store in cache for 15 minutes (featured products change more often than categories)
+	_ = h.Cache.SetJSON(c.Request.Context(), cacheKey, dtoList, 15*time.Minute)
+
+	c.JSON(http.StatusOK, dtoList)
 }
 
 // @Summary Search products
@@ -272,13 +272,21 @@ func (h *EcommerceHandler) ListProducts(c *gin.Context) {
 	businessID := c.Query("business_id")
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
+	cacheKey := fmt.Sprintf("ecommerce:products:%s:%s:%s", businessID, limitStr, offsetStr)
+
+	var dtoList []ProductDTO
+	found, err := h.Cache.GetJSON(c.Request.Context(), cacheKey, &dtoList)
+	if err == nil && found {
+		c.JSON(http.StatusOK, dtoList)
+		return
+	}
 
 	limit, _ := strconv.Atoi(limitStr)
 	offset, _ := strconv.Atoi(offsetStr)
 
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+	err = WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		dtoList := make([]ProductDTO, 0)
+		dtoList = make([]ProductDTO, 0)
 
 		if businessID != "" {
 			products, err := qtx.GetProductsByBusiness(c.Request.Context(), db.GetProductsByBusinessParams{
@@ -304,14 +312,16 @@ func (h *EcommerceHandler) ListProducts(c *gin.Context) {
 				dtoList = append(dtoList, GetProductsRowToDTO(p))
 			}
 		}
-
-		c.JSON(http.StatusOK, dtoList)
 		return nil
 	})
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
+
+	_ = h.Cache.SetJSON(c.Request.Context(), cacheKey, dtoList, 10*time.Minute)
+	c.JSON(http.StatusOK, dtoList)
 }
 
 // GetProductByID returns a single product with details
@@ -485,26 +495,42 @@ func ToCategoryDTO(cat db.Category) CategoryDTO {
 	}
 }
 
-// ListCategories returns all categories
+// ListCategories returns all categories, with Redis caching
 func (h *EcommerceHandler) ListCategories(c *gin.Context) {
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+	cacheKey := "ecommerce:categories"
+	var dtoList []CategoryDTO
+
+	// 1. Try to get from cache
+	found, err := h.Cache.GetJSON(c.Request.Context(), cacheKey, &dtoList)
+	if err == nil && found {
+		c.JSON(http.StatusOK, dtoList)
+		return
+	}
+
+	// 2. Cache miss: Get from database
+	err = WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
 		categories, err := qtx.GetCategories(c.Request.Context())
 		if err != nil {
 			return err
 		}
 
-		dtoList := make([]CategoryDTO, 0)
+		dtoList = make([]CategoryDTO, 0)
 		for _, cat := range categories {
 			dtoList = append(dtoList, ToCategoryDTO(cat))
 		}
-		c.JSON(http.StatusOK, dtoList)
 		return nil
 	})
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
+
+	// 3. Store in cache for 1 hour
+	_ = h.Cache.SetJSON(c.Request.Context(), cacheKey, dtoList, 1*time.Hour)
+
+	c.JSON(http.StatusOK, dtoList)
 }
 
 func (h *EcommerceHandler) CreateCategory(c *gin.Context) {
@@ -530,6 +556,10 @@ func (h *EcommerceHandler) CreateCategory(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+
+		// Invalidate cache
+		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:categories")
+
 		c.JSON(http.StatusCreated, ToCategoryDTO(cat))
 		return nil
 	})

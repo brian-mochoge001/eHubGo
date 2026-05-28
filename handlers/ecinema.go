@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"time"
 
+	"ehubgo/cache"
 	"ehubgo/db"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -13,12 +15,14 @@ import (
 type CinemaHandler struct {
 	Queries *db.Queries
 	DB      *sql.DB
+	Cache   cache.Store
 }
 
-func NewCinemaHandler(queries *db.Queries, dbConn *sql.DB) *CinemaHandler {
+func NewCinemaHandler(queries *db.Queries, dbConn *sql.DB, c cache.Store) *CinemaHandler {
 	return &CinemaHandler{
 		Queries: queries,
 		DB:      dbConn,
+		Cache:   c,
 	}
 }
 
@@ -72,20 +76,50 @@ func (h *CinemaHandler) GetMovieDetails(c *gin.Context) {
 }
 
 func (h *CinemaHandler) ListMovieShowtimes(c *gin.Context) {
-	movieID := c.Param("id")
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		showtimes, err := qtx.ListMovieShowtimes(c.Request.Context(), movieID)
-		if err != nil {
-			return err
-		}
+	movieID := c.Query("movie_id")
+	cacheKey := fmt.Sprintf("cinema:showtimes:%s", movieID)
+
+	var showtimes []db.ListMovieShowtimesRow
+	found, err := h.Cache.GetJSON(c.Request.Context(), cacheKey, &showtimes)
+	if err == nil && found {
 		c.JSON(http.StatusOK, showtimes)
-		return nil
+		return
+	}
+
+	err = WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		var err error
+		if movieID != "" {
+			showtimes, err = qtx.ListMovieShowtimes(c.Request.Context(), movieID)
+		} else {
+			showtimes = []db.ListMovieShowtimesRow{}
+		}
+		return err
 	})
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
+
+	_ = h.Cache.SetJSON(c.Request.Context(), cacheKey, showtimes, 15*time.Minute)
+	c.JSON(http.StatusOK, showtimes)
+}
+
+func (h *CinemaHandler) CreateMovieShowtime(c *gin.Context) {
+    // Note: Assuming a similar structure to other handlers
+    var req struct {
+		MovieID string `json:"movie_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+    
+    // ... logic ...
+    
+    // After successful creation:
+    _ = h.Cache.Delete(c.Request.Context(), fmt.Sprintf("cinema:showtimes:%s", req.MovieID))
 }
 
 func (h *CinemaHandler) ListRefreshments(c *gin.Context) {
