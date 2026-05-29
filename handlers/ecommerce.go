@@ -452,6 +452,78 @@ func (h *EcommerceHandler) UpdateProduct(c *gin.Context) {
 	}
 }
 
+// GetMiniserviceAnalytics returns platform-wide analytics for a specific miniservice type
+func (h *EcommerceHandler) GetMiniserviceAnalytics(c *gin.Context) {
+	serviceType := c.Query("type")
+	// For now, returning mock data as the analytics schema is still under development
+	c.JSON(http.StatusOK, gin.H{
+		"type":            serviceType,
+		"total_revenue":   1250000.0,
+		"active_vendors":  45,
+		"completion_rate": 94.5,
+	})
+}
+
+// GetStoreAnalytics returns analytics for a specific business
+func (h *EcommerceHandler) GetStoreAnalytics(c *gin.Context) {
+	businessID := c.Param("id")
+	// For now, returning mock data
+	c.JSON(http.StatusOK, gin.H{
+		"business_id":     businessID,
+		"total_revenue":   45000.0,
+		"total_orders":    124,
+		"completion_rate": 98.0,
+	})
+}
+
+// GetMiniserviceAnalytics returns platform-wide analytics for a specific miniservice type
+func (h *EcommerceHandler) GetMiniserviceAnalytics(c *gin.Context) {
+	serviceType := c.Query("type")
+	// For now, returning basic mock data as the analytics schema is still under development
+	c.JSON(http.StatusOK, gin.H{
+		"type":            serviceType,
+		"total_revenue":   1250000.0,
+		"active_vendors":  45,
+		"completion_rate": 94.5,
+	})
+}
+
+// GetStoreAnalytics returns analytics for a specific business
+func (h *EcommerceHandler) GetStoreAnalytics(c *gin.Context) {
+	businessID := c.Param("id")
+	// For now, returning basic mock data
+	c.JSON(http.StatusOK, gin.H{
+		"business_id":     businessID,
+		"total_revenue":   45000.0,
+		"total_orders":    124,
+		"completion_rate": 98.0,
+	})
+}
+
+// GetMiniserviceAnalytics returns platform-wide analytics for a specific miniservice type
+func (h *EcommerceHandler) GetMiniserviceAnalytics(c *gin.Context) {
+	serviceType := c.Query("type")
+	// For now, returning basic mock data as the analytics schema is still under development
+	c.JSON(http.StatusOK, gin.H{
+		"type":            serviceType,
+		"total_revenue":   1250000.0,
+		"active_vendors":  45,
+		"completion_rate": 94.5,
+	})
+}
+
+// GetStoreAnalytics returns analytics for a specific business
+func (h *EcommerceHandler) GetStoreAnalytics(c *gin.Context) {
+	businessID := c.Param("id")
+	// For now, returning basic mock data
+	c.JSON(http.StatusOK, gin.H{
+		"business_id":     businessID,
+		"total_revenue":   45000.0,
+		"total_orders":    124,
+		"completion_rate": 98.0,
+	})
+}
+
 // @Summary Search and filter products
 // @Description Searches and filters products based on categories, brands, and dynamic attributes
 // @Tags products

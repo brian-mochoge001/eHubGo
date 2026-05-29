@@ -148,6 +148,11 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
     authRequired := api.Group("/")
     authRequired.Use(middleware.RequireAuth())
     {
+        // Analytics
+        authRequired.GET("/analytics/miniservices", reg.Ecommerce.GetMiniserviceAnalytics)
+        authRequired.GET("/analytics/stores/:id", reg.Ecommerce.GetStoreAnalytics)
+
+        authRequired.GET("/users", reg.User.ListUsers)
         authRequired.GET("/users/me", reg.User.GetMe)
 
         authRequired.POST("/businesses", reg.Business.RegisterBusiness)

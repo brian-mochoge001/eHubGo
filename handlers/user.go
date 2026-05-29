@@ -133,3 +133,21 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 		"roles": roles,
 	})
 }
+
+// ListUsers returns all users in the system (Admin only)
+func (h *UserHandler) ListUsers(c *gin.Context) {
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		users, err := qtx.ListUsers(c.Request.Context())
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, users)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
