@@ -66,3 +66,37 @@ func (q *Queries) CreateAttributeValue(ctx context.Context, arg CreateAttributeV
 	err := q.db.QueryRowContext(ctx, "INSERT INTO attribute_values (attribute_id, value) VALUES ($1, $2) RETURNING id, attribute_id, value", arg.AttributeID, arg.Value).Scan(&i.ID, &i.AttributeID, &i.Value)
 	return i, err
 }
+
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, "SELECT id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, created_at, updated_at FROM users")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.FirstName,
+			&i.LastName,
+			&i.DateOfBirth,
+			&i.PhoneNumber,
+			&i.ProfilePictureUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -459,6 +459,9 @@ func (h *EcommerceHandler) GetMiniserviceAnalytics(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"type":            serviceType,
 		"total_revenue":   1250000.0,
+		"total_orders":    4500,
+		"active_users":    1284,
+		"active_drivers":  24,
 		"active_vendors":  45,
 		"completion_rate": 94.5,
 	})
@@ -472,54 +475,8 @@ func (h *EcommerceHandler) GetStoreAnalytics(c *gin.Context) {
 		"business_id":     businessID,
 		"total_revenue":   45000.0,
 		"total_orders":    124,
-		"completion_rate": 98.0,
-	})
-}
-
-// GetMiniserviceAnalytics returns platform-wide analytics for a specific miniservice type
-func (h *EcommerceHandler) GetMiniserviceAnalytics(c *gin.Context) {
-	serviceType := c.Query("type")
-	// For now, returning basic mock data as the analytics schema is still under development
-	c.JSON(http.StatusOK, gin.H{
-		"type":            serviceType,
-		"total_revenue":   1250000.0,
-		"active_vendors":  45,
-		"completion_rate": 94.5,
-	})
-}
-
-// GetStoreAnalytics returns analytics for a specific business
-func (h *EcommerceHandler) GetStoreAnalytics(c *gin.Context) {
-	businessID := c.Param("id")
-	// For now, returning basic mock data
-	c.JSON(http.StatusOK, gin.H{
-		"business_id":     businessID,
-		"total_revenue":   45000.0,
-		"total_orders":    124,
-		"completion_rate": 98.0,
-	})
-}
-
-// GetMiniserviceAnalytics returns platform-wide analytics for a specific miniservice type
-func (h *EcommerceHandler) GetMiniserviceAnalytics(c *gin.Context) {
-	serviceType := c.Query("type")
-	// For now, returning basic mock data as the analytics schema is still under development
-	c.JSON(http.StatusOK, gin.H{
-		"type":            serviceType,
-		"total_revenue":   1250000.0,
-		"active_vendors":  45,
-		"completion_rate": 94.5,
-	})
-}
-
-// GetStoreAnalytics returns analytics for a specific business
-func (h *EcommerceHandler) GetStoreAnalytics(c *gin.Context) {
-	businessID := c.Param("id")
-	// For now, returning basic mock data
-	c.JSON(http.StatusOK, gin.H{
-		"business_id":     businessID,
-		"total_revenue":   45000.0,
-		"total_orders":    124,
+		"active_users":    85, // Represents visitors for vendor
+		"active_drivers":  5,  // Represents assigned drivers
 		"completion_rate": 98.0,
 	})
 }
