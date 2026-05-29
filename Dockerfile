@@ -14,13 +14,13 @@ RUN go mod download
 COPY . .
 
 # Generate database bindings
-RUN sqlc generate
+RUN sqlc generate || (echo "sqlc generation failed. Please ensure you have a valid sqlc.yaml configuration and that your SQL files are correctly defined." && exit 1)
 
 # Build the main application
-RUN CGO_ENABLED=0 GOOS=linux go build -o main .
+RUN CGO_ENABLED=0 GOOS=linux go build -v -o main .
 
 # Build the seed script
-RUN CGO_ENABLED=0 GOOS=linux go build -o seed ./cmd/seed/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -v -o seed ./cmd/seed/main.go
 
 # Final stage
 FROM alpine:latest
