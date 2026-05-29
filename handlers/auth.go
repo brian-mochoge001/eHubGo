@@ -41,6 +41,7 @@ type RegisterRequest struct {
 	Password  string `json:"password" binding:"required,min=8"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
+	Role      string `json:"role"` // Optional role selection
 }
 
 type AuthResponse struct {
@@ -142,10 +143,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Assign default "user" role
+	// Assign role
+	assignedRole := "user"
+	if req.Role != "" {
+		assignedRole = req.Role
+	}
+
 	_, err = h.Queries.AssignRoleToUser(c.Request.Context(), db.AssignRoleToUserParams{
 		UserID: user.ID,
-		Role:   "user",
+		Role:   db.UserRoleType(assignedRole),
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to assign role"})
@@ -153,7 +159,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// Generate JWT
-	roles := []string{"user"}
+	roles := []string{assignedRole}
 	token, err := h.generateJWT(user.ID, user.Email, roles)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
