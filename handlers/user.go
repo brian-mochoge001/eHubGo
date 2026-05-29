@@ -105,7 +105,11 @@ func (h *UserHandler) ListBills(c *gin.Context) {
 }
 
 func (h *UserHandler) GetMe(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in context"})
+		return
+	}
 	uid := userID.(string)
 
 	var user struct {
@@ -121,12 +125,25 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 		uid).Scan(&user.ID, &user.Email, &user.FirstName, &user.LastName, &user.ProfileUrl)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to map identity"})
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch user data"})
 		return
 	}
 
-	rolesStr, _ := c.Get("user_roles")
-	roles := strings.Split(rolesStr.(string), ",")
+	rolesVal, exists := c.Get("user_roles")
+	var roles []string
+	if exists {
+		rolesStr := rolesVal.(string)
+		if rolesStr != "" {
+			roles = strings.Split(rolesStr, ",")
+		}
+	}
+	if len(roles) == 0 {
+		roles = []string{"user"}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"user":  user,
