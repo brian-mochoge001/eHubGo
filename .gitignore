@@ -6,6 +6,8 @@ service-account.json
 ehubgo.exe
 ehubgo.exe~
 main.exe
+main
+ehubgo
 *.exe
 vendor/
 seed.exe
