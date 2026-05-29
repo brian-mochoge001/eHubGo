@@ -452,17 +452,80 @@ func (h *EcommerceHandler) UpdateProduct(c *gin.Context) {
 	}
 }
 
-// DeleteProduct removes a product from the database
-func (h *EcommerceHandler) DeleteProduct(c *gin.Context) {
-	id := c.Param("id")
+// @Summary Search and filter products
+// @Description Searches and filters products based on categories, brands, and dynamic attributes
+// @Tags products
+// @Produce json
+// @Param category_id query string false "Category ID"
+// @Param brand_id query string false "Brand ID"
+// @Param min_price query number false "Min Price"
+// @Param max_price query number false "Max Price"
+// @Param attributes query string false "JSON-encoded attributes (e.g., {"color": "red"})"
+// @Router /api/v1/products/filter [get]
+func (h *EcommerceHandler) SearchAndFilterProducts(c *gin.Context) {
+	categoryID := c.Query("category_id")
+	brandID := c.Query("brand_id")
+	minPrice := c.Query("min_price")
+	maxPrice := c.Query("max_price")
+	attrsJSON := c.Query("attributes") // Expects JSON, e.g., '{"color": "red"}'
+
+	sqlQuery := `
+		SELECT id, business_id, name, description, price, currency, stock_quantity, 
+		       category_id, brand_id, model_id, image_urls, rating, review_count, 
+		       is_flash_sale, discount_percentage, created_at, updated_at
+		FROM products
+		WHERE 1=1
+	`
+	var args []interface{}
+	argCount := 1
+
+	if categoryID != "" {
+		sqlQuery += fmt.Sprintf(" AND category_id = $%d", argCount)
+		args = append(args, categoryID)
+		argCount++
+	}
+	if brandID != "" {
+		sqlQuery += fmt.Sprintf(" AND brand_id = $%d", argCount)
+		args = append(args, brandID)
+		argCount++
+	}
+	if minPrice != "" {
+		sqlQuery += fmt.Sprintf(" AND price::numeric >= $%d", argCount)
+		args = append(args, minPrice)
+		argCount++
+	}
+	if maxPrice != "" {
+		sqlQuery += fmt.Sprintf(" AND price::numeric <= $%d", argCount)
+		args = append(args, maxPrice)
+		argCount++
+	}
+	if attrsJSON != "" {
+		sqlQuery += fmt.Sprintf(" AND attribute_data @> $%d::jsonb", argCount)
+		args = append(args, attrsJSON)
+		argCount++
+	}
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		err := qtx.DeleteProduct(c.Request.Context(), id)
+		rows, err := tx.QueryContext(c.Request.Context(), sqlQuery, args...)
 		if err != nil {
 			return err
 		}
-		c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
+		defer rows.Close()
+
+		dtoList := make([]ProductDTO, 0)
+		for rows.Next() {
+			var p db.Product
+			err := rows.Scan(
+				&p.ID, &p.BusinessID, &p.Name, &p.Description, &p.Price, &p.Currency,
+				&p.StockQuantity, &p.CategoryID, &p.BrandID, &p.ModelID, pq.Array(&p.ImageUrls),
+				&p.Rating, &p.ReviewCount, &p.IsFlashSale, &p.DiscountPercentage, &p.CreatedAt, &p.UpdatedAt,
+			)
+			if err != nil {
+				return err
+			}
+			dtoList = append(dtoList, ToProductDTO(p))
+		}
+		c.JSON(http.StatusOK, dtoList)
 		return nil
 	})
 
@@ -531,6 +594,76 @@ func (h *EcommerceHandler) ListCategories(c *gin.Context) {
 	_ = h.Cache.SetJSON(c.Request.Context(), cacheKey, dtoList, 1*time.Hour)
 
 	c.JSON(http.StatusOK, dtoList)
+}
+
+func (h *EcommerceHandler) ListAttributes(c *gin.Context) {
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		attrs, err := qtx.ListAttributes(c.Request.Context())
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, attrs)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// CreateAttribute creates a new attribute
+func (h *EcommerceHandler) CreateAttribute(c *gin.Context) {
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		attr, err := qtx.CreateAttribute(c.Request.Context(), req.Name)
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusCreated, attr)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// AddAttributeValue adds a value to an attribute
+func (h *EcommerceHandler) AddAttributeValue(c *gin.Context) {
+	attrID := c.Param("id")
+	var req struct {
+		Value string `json:"value" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		val, err := qtx.CreateAttributeValue(c.Request.Context(), db.CreateAttributeValueParams{
+			AttributeID: attrID,
+			Value:       req.Value,
+		})
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusCreated, val)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
 }
 
 func (h *EcommerceHandler) CreateCategory(c *gin.Context) {
@@ -1172,6 +1305,30 @@ func (h *EcommerceHandler) GetOrders(c *gin.Context) {
 			return err
 		}
 		c.JSON(http.StatusOK, orders)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+// DeleteProduct removes a product from the database
+func (h *EcommerceHandler) DeleteProduct(c *gin.Context) {
+	id := c.Param("id")
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		err := qtx.DeleteProduct(c.Request.Context(), id)
+		if err != nil {
+			return err
+		}
+
+		// Invalidate cache
+		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:product:" + id)
+		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:featured:*")
+		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:products:*")
+
+		c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
 		return nil
 	})
 
