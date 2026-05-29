@@ -83,13 +83,23 @@ func (h *FoodHandler) GetNearbyMotorbikeDrivers(c *gin.Context) {
 	var params struct {
 		Longitude float64 `form:"longitude" binding:"required"`
 		Latitude  float64 `form:"latitude" binding:"required"`
-		Radius    float64 `form:"radius,default=5000"` // default 5km
-		Limit     int32   `form:"limit,default=10"`
+		Radius    float64 `form:"radius,default=5000"`
+		Limit     int32   `form:"limit,default=5"`
 	}
 
 	if err := c.ShouldBindQuery(&params); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	if params.Radius <= 0 || params.Radius > 5000 {
+		params.Radius = 5000
+	}
+	if params.Limit <= 0 {
+		params.Limit = 5
+	}
+	if params.Limit > 5 {
+		params.Limit = 5
 	}
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {

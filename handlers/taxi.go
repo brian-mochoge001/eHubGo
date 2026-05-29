@@ -4,11 +4,14 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"sort"
+	"time"
 
 	"ehubgo/db"
-
 	"github.com/gin-gonic/gin"
+	"github.com/gojuno/go.osrm"
 	"github.com/google/uuid"
+	"github.com/paulmach/go.geo"
 )
 
 type TaxiHandler struct {
@@ -95,13 +98,23 @@ func (h *TaxiHandler) GetNearbyDrivers(c *gin.Context) {
 	var params struct {
 		Longitude float64 `form:"longitude" binding:"required"`
 		Latitude  float64 `form:"latitude" binding:"required"`
-		Radius    float64 `form:"radius,default=2000"` // default 2km
-		Limit     int32   `form:"limit,default=10"`
+		Radius    float64 `form:"radius,default=5000"`
+		Limit     int     `form:"limit,default=5"`
 	}
 
 	if err := c.ShouldBindQuery(&params); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	if params.Radius <= 0 || params.Radius > 5000 {
+		params.Radius = 5000
+	}
+	if params.Limit <= 0 {
+		params.Limit = 5
+	}
+	if params.Limit > 5 {
+		params.Limit = 5
 	}
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
@@ -110,12 +123,52 @@ func (h *TaxiHandler) GetNearbyDrivers(c *gin.Context) {
 			StMakepoint:   params.Longitude,
 			StMakepoint_2: params.Latitude,
 			StDwithin:     params.Radius,
-			Limit:         params.Limit,
+			Limit:         int32(params.Limit),
 		})
 		if err != nil {
 			return err
 		}
-		c.JSON(http.StatusOK, drivers)
+
+		if len(drivers) == 0 {
+			c.JSON(http.StatusOK, []gin.H{})
+			return nil
+		}
+
+		// Initialize OSRM client
+		client := osrm.NewFromURL("http://router.project-osrm.org")
+
+		var results []gin.H
+
+		for _, d := range drivers {
+			dLat := ParseCoordinate(d.Latitude)
+			dLng := ParseCoordinate(d.Longitude)
+
+			route, err := client.Route(c.Request.Context(), osrm.RouteRequest{
+				Profile: "driving",
+				Coordinates: osrm.NewGeometryFromPointSet(geo.PointSet{
+					geo.Point{dLng, dLat},
+					geo.Point{params.Longitude, params.Latitude},
+				}),
+			})
+
+			etaMinutes := 15
+			if err == nil && len(route.Routes) > 0 {
+				etaMinutes = int(route.Routes[0].Duration / 60)
+			}
+
+			if etaMinutes <= 15 {
+				results = append(results, gin.H{
+					"driver":      d,
+					"eta_minutes": etaMinutes,
+				})
+			}
+		}
+
+		sort.Slice(results, func(i, j int) bool {
+			return results[i]["eta_minutes"].(int) < results[j]["eta_minutes"].(int)
+		})
+
+		c.JSON(http.StatusOK, results)
 		return nil
 	})
 
@@ -158,6 +211,52 @@ func (h *TaxiHandler) DriverWS(c *gin.Context) {
 	}()
 
 	StreamEvents(w, flusher, ch, done)
+}
+
+// GetRideHistory returns all completed taxi trips for the authenticated user
+func (h *TaxiHandler) GetRideHistory(c *gin.Context) {
+	// ...
+
+	userID := c.MustGet("user_id").(string)
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(c.Request.Context(), `
+			SELECT t.id, t.status, t.total_amount, t.currency, t.created_at,
+			       d.name as driver_name
+			FROM taxi_trips t
+			LEFT JOIN drivers d ON t.driver_id = d.id
+			WHERE t.user_id = $1 AND t.status = 'completed'
+			ORDER BY t.created_at DESC
+		`, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		var history []gin.H
+		for rows.Next() {
+			var id, status, totalAmount, currency string
+			var driverName sql.NullString
+			var createdAt time.Time
+			if err := rows.Scan(&id, &status, &totalAmount, &currency, &createdAt, &driverName); err != nil {
+				return err
+			}
+			history = append(history, gin.H{
+				"id":           id,
+				"status":       status,
+				"total_amount": totalAmount,
+				"currency":     currency,
+				"driver_name":  driverName.String,
+				"created_at":   createdAt,
+			})
+		}
+		c.JSON(http.StatusOK, history)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
 }
 
 func (h *TaxiHandler) GetDriverLocation(c *gin.Context) {

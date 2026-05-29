@@ -652,6 +652,32 @@ CREATE TABLE transactions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Complaint System
+CREATE TYPE complaint_reason AS ENUM (
+    'bad_behavior', 
+    'no_show', 
+    'unsafe_driving', 
+    'payment_issue', 
+    'other'
+);
+
+CREATE TABLE complaints (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    reporter_id TEXT NOT NULL REFERENCES users(id),
+    target_id TEXT NOT NULL, -- user_id or driver_id
+    target_type TEXT NOT NULL, -- 'user' or 'driver'
+    reason complaint_reason NOT NULL,
+    details TEXT,
+    status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'reviewed', 'action_taken'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Blacklisting Status
+ALTER TABLE users ADD COLUMN is_blacklisted BOOLEAN DEFAULT FALSE;
+ALTER TABLE drivers ADD COLUMN is_blacklisted BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN status_notes TEXT;
+ALTER TABLE drivers ADD COLUMN status_notes TEXT;
+
 -- Review System
 CREATE TABLE reviews (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -58,11 +58,11 @@ func (h *ReviewHandler) CreateReview(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 }
-
+// GetReviewsByTarget returns all reviews for a specific target
 func (h *ReviewHandler) GetReviewsByTarget(c *gin.Context) {
 	targetID := c.Query("target_id")
 	targetType := c.Query("target_type")
-	
+
 	if targetID == "" || targetType == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "target_id and target_type required"})
 		return
@@ -85,3 +85,4 @@ func (h *ReviewHandler) GetReviewsByTarget(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 }
+

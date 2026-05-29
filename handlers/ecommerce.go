@@ -612,6 +612,24 @@ func (h *EcommerceHandler) ListAttributes(c *gin.Context) {
 	}
 }
 
+// GetAttributeValues returns all values for a specific attribute
+func (h *EcommerceHandler) GetAttributeValues(c *gin.Context) {
+	attrID := c.Param("id")
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		vals, err := qtx.ListAttributeValues(c.Request.Context(), attrID)
+		if err != nil {
+			return err
+		}
+		c.JSON(http.StatusOK, vals)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
 // CreateAttribute creates a new attribute
 func (h *EcommerceHandler) CreateAttribute(c *gin.Context) {
 	var req struct {

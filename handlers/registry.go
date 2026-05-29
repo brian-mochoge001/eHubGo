@@ -41,6 +41,7 @@ type Registry struct {
     Delivery   *DeliveryHandler
     Pricing    *PricingHandler
     Feedback   *FeedbackHandler
+    Complaints *ComplaintHandler
 }
 
 // NewRegistry constructs all handlers used by the application.
@@ -75,6 +76,7 @@ func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, jw
         Delivery:  NewDeliveryHandler(queries, dbConn),
         Pricing:   NewPricingHandler(queries, dbConn),
         Feedback:  NewFeedbackHandler(queries, dbConn),
+        Complaints: NewComplaintHandler(queries, dbConn),
     }
 }
 
@@ -86,6 +88,7 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
     
     // Public routes
     api.POST("/feedback", reg.Feedback.SubmitFeedback)
+    api.POST("/complaints", reg.Complaints.SubmitComplaint)
 
     api.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
@@ -161,6 +164,11 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
         authRequired.POST("/brands", reg.Ecommerce.CreateBrand)
         authRequired.PUT("/brands/:id", reg.Ecommerce.UpdateBrand)
         authRequired.DELETE("/brands/:id", reg.Ecommerce.DeleteBrand)
+
+        // Attribute Management
+        authRequired.GET("/attributes", reg.Ecommerce.ListAttributes)
+        authRequired.POST("/attributes", reg.Ecommerce.CreateAttribute)
+        authRequired.POST("/attributes/:id/values", reg.Ecommerce.AddAttributeValue)
 
         authRequired.POST("/models", reg.Ecommerce.CreateProductModel)
         authRequired.PUT("/models/:id", reg.Ecommerce.UpdateProductModel)
