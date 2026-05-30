@@ -19,40 +19,6 @@ CREATE TYPE user_role_type AS ENUM (
     'user'
 );
 
--- ... (skipping to around line 350 where businesses are defined)
-
--- Business Staff (The employees of a specific store)
-CREATE TABLE business_staff (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role TEXT NOT NULL DEFAULT 'manager', -- 'manager', 'cashier', 'delivery'
-    permissions JSONB DEFAULT '{}',
-    is_active BOOLEAN DEFAULT TRUE,
-    invited_by TEXT REFERENCES users(id),
-    invitation_token TEXT UNIQUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(business_id, user_id)
-);
-
-ALTER TABLE business_staff ENABLE ROW LEVEL SECURITY;
-ALTER TABLE business_staff FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY business_staff_manage_policy ON business_staff
-    FOR ALL USING (
-        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR 
-        has_role('admin')
-    );
-
-CREATE POLICY business_staff_view_policy ON business_staff
-    FOR SELECT USING (
-        user_id = get_app_user_id() OR 
-        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id())
-    );
-
--- ... (rest of the file)
-
 -- Business Verification Status
 CREATE TYPE business_verification_status AS ENUM (
     'pending', 
@@ -100,6 +66,8 @@ CREATE TABLE users (
     date_of_birth DATE,
     phone_number TEXT UNIQUE,
     profile_picture_url TEXT,
+    is_blacklisted BOOLEAN DEFAULT FALSE,
+    status_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -181,6 +149,36 @@ CREATE TABLE businesses (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Business Staff (The employees of a specific store)
+CREATE TABLE business_staff (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'manager', -- 'manager', 'cashier', 'delivery'
+    permissions JSONB DEFAULT '{}',
+    is_active BOOLEAN DEFAULT TRUE,
+    invited_by TEXT REFERENCES users(id),
+    invitation_token TEXT UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(business_id, user_id)
+);
+
+ALTER TABLE business_staff ENABLE ROW LEVEL SECURITY;
+ALTER TABLE business_staff FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY business_staff_manage_policy ON business_staff
+    FOR ALL USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR 
+        has_role('admin')
+    );
+
+CREATE POLICY business_staff_view_policy ON business_staff
+    FOR SELECT USING (
+        user_id = get_app_user_id() OR 
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id())
+    );
 
 -- Business Locations (Multiple branches/warehouses)
 CREATE TABLE business_locations (
@@ -710,12 +708,6 @@ CREATE TABLE complaints (
     status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'reviewed', 'action_taken'
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-
--- Blacklisting Status
-ALTER TABLE users ADD COLUMN is_blacklisted BOOLEAN DEFAULT FALSE;
-ALTER TABLE drivers ADD COLUMN is_blacklisted BOOLEAN DEFAULT FALSE;
-ALTER TABLE users ADD COLUMN status_notes TEXT;
-ALTER TABLE drivers ADD COLUMN status_notes TEXT;
 
 -- Review System
 CREATE TABLE reviews (
