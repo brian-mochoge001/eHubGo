@@ -1,3 +1,29 @@
+-- name: CreateBusinessStaff :one
+INSERT INTO business_staff (id, business_id, user_id, role, permissions, invited_by, invitation_token)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: GetBusinessStaff :one
+SELECT * FROM business_staff WHERE business_id = $1 AND user_id = $2;
+
+-- name: GetBusinessStaffByToken :one
+SELECT * FROM business_staff WHERE invitation_token = $1;
+
+-- name: ListBusinessStaffByBusiness :many
+SELECT bs.*, u.email, u.first_name, u.last_name, u.profile_picture_url
+FROM business_staff bs
+JOIN users u ON bs.user_id = u.id
+WHERE bs.business_id = $1;
+
+-- name: UpdateBusinessStaff :one
+UPDATE business_staff 
+SET role = $3, permissions = $4, is_active = $5, updated_at = CURRENT_TIMESTAMP
+WHERE business_id = $1 AND user_id = $2
+RETURNING *;
+
+-- name: DeleteBusinessStaff :exec
+DELETE FROM business_staff WHERE business_id = $1 AND user_id = $2;
+
 -- C2C Marketplace
 -- name: CreateC2CSeller :one
 INSERT INTO c2c_sellers (id, user_id, bio, avatar_url)
@@ -38,6 +64,22 @@ SELECT * FROM businesses WHERE owner_id = $1;
 
 -- name: ListBusinessesByType :many
 SELECT * FROM businesses WHERE miniservice_type = $1 AND verification_status = 'approved';
+
+-- name: ListAllBusinesses :many
+SELECT b.*, u.email as owner_email, u.first_name as owner_first_name, u.last_name as owner_last_name
+FROM businesses b
+JOIN users u ON b.owner_id = u.id
+ORDER BY b.created_at DESC;
+
+-- name: ListBusinessesByStatus :many
+SELECT b.*, u.email as owner_email, u.first_name as owner_first_name, u.last_name as owner_last_name
+FROM businesses b
+JOIN users u ON b.owner_id = u.id
+WHERE b.verification_status = $1
+ORDER BY b.created_at DESC;
+
+-- name: GetBusinessDocuments :many
+SELECT * FROM vendor_documents WHERE business_id = $1;
 
 -- Services
 -- name: CreateService :one

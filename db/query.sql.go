@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+	"github.com/sqlc-dev/pqtype"
 )
 
 const addBusinessLocation = `-- name: AddBusinessLocation :exec
@@ -514,6 +515,48 @@ func (q *Queries) CreateBusiness(ctx context.Context, arg CreateBusinessParams) 
 	return i, err
 }
 
+const createBusinessStaff = `-- name: CreateBusinessStaff :one
+INSERT INTO business_staff (id, business_id, user_id, role, permissions, invited_by, invitation_token)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, business_id, user_id, role, permissions, is_active, invited_by, invitation_token, created_at, updated_at
+`
+
+type CreateBusinessStaffParams struct {
+	ID              string                `json:"id"`
+	BusinessID      string                `json:"business_id"`
+	UserID          string                `json:"user_id"`
+	Role            string                `json:"role"`
+	Permissions     pqtype.NullRawMessage `json:"permissions"`
+	InvitedBy       sql.NullString        `json:"invited_by"`
+	InvitationToken sql.NullString        `json:"invitation_token"`
+}
+
+func (q *Queries) CreateBusinessStaff(ctx context.Context, arg CreateBusinessStaffParams) (BusinessStaff, error) {
+	row := q.db.QueryRowContext(ctx, createBusinessStaff,
+		arg.ID,
+		arg.BusinessID,
+		arg.UserID,
+		arg.Role,
+		arg.Permissions,
+		arg.InvitedBy,
+		arg.InvitationToken,
+	)
+	var i BusinessStaff
+	err := row.Scan(
+		&i.ID,
+		&i.BusinessID,
+		&i.UserID,
+		&i.Role,
+		&i.Permissions,
+		&i.IsActive,
+		&i.InvitedBy,
+		&i.InvitationToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createC2CListing = `-- name: CreateC2CListing :one
 INSERT INTO c2c_listings (id, seller_id, title, description, price, currency, image_urls, is_negotiable, location, condition, status)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -673,7 +716,7 @@ func (q *Queries) CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doc
 const createDriver = `-- name: CreateDriver :one
 INSERT INTO drivers (id, user_id, name, status, vehicle_type_id, rating)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at
+RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, is_blacklisted, status_notes
 `
 
 type CreateDriverParams struct {
@@ -705,6 +748,8 @@ func (q *Queries) CreateDriver(ctx context.Context, arg CreateDriverParams) (Dri
 		&i.LastLocation,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.IsBlacklisted,
+		&i.StatusNotes,
 	)
 	return i, err
 }
@@ -1477,7 +1522,7 @@ func (q *Queries) CreateTicket(ctx context.Context, arg CreateTicketParams) (Tic
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, created_at, updated_at
+RETURNING id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, created_at, updated_at, is_blacklisted, status_notes
 `
 
 type CreateUserParams struct {
@@ -1514,6 +1559,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.ProfilePictureUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsBlacklisted,
+		&i.StatusNotes,
 	)
 	return i, err
 }
@@ -1575,6 +1622,20 @@ DELETE FROM brands WHERE id = $1
 
 func (q *Queries) DeleteBrand(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, deleteBrand, id)
+	return err
+}
+
+const deleteBusinessStaff = `-- name: DeleteBusinessStaff :exec
+DELETE FROM business_staff WHERE business_id = $1 AND user_id = $2
+`
+
+type DeleteBusinessStaffParams struct {
+	BusinessID string `json:"business_id"`
+	UserID     string `json:"user_id"`
+}
+
+func (q *Queries) DeleteBusinessStaff(ctx context.Context, arg DeleteBusinessStaffParams) error {
+	_, err := q.db.ExecContext(ctx, deleteBusinessStaff, arg.BusinessID, arg.UserID)
 	return err
 }
 
@@ -1694,6 +1755,91 @@ func (q *Queries) GetBusinessByID(ctx context.Context, id string) (Business, err
 		&i.VerificationStatus,
 		&i.Rating,
 		&i.ReviewCount,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBusinessDocuments = `-- name: GetBusinessDocuments :many
+SELECT id, business_id, type, url, status, review_notes, verified_at, created_at FROM vendor_documents WHERE business_id = $1
+`
+
+func (q *Queries) GetBusinessDocuments(ctx context.Context, businessID string) ([]VendorDocument, error) {
+	rows, err := q.db.QueryContext(ctx, getBusinessDocuments, businessID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VendorDocument
+	for rows.Next() {
+		var i VendorDocument
+		if err := rows.Scan(
+			&i.ID,
+			&i.BusinessID,
+			&i.Type,
+			&i.Url,
+			&i.Status,
+			&i.ReviewNotes,
+			&i.VerifiedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getBusinessStaff = `-- name: GetBusinessStaff :one
+SELECT id, business_id, user_id, role, permissions, is_active, invited_by, invitation_token, created_at, updated_at FROM business_staff WHERE business_id = $1 AND user_id = $2
+`
+
+type GetBusinessStaffParams struct {
+	BusinessID string `json:"business_id"`
+	UserID     string `json:"user_id"`
+}
+
+func (q *Queries) GetBusinessStaff(ctx context.Context, arg GetBusinessStaffParams) (BusinessStaff, error) {
+	row := q.db.QueryRowContext(ctx, getBusinessStaff, arg.BusinessID, arg.UserID)
+	var i BusinessStaff
+	err := row.Scan(
+		&i.ID,
+		&i.BusinessID,
+		&i.UserID,
+		&i.Role,
+		&i.Permissions,
+		&i.IsActive,
+		&i.InvitedBy,
+		&i.InvitationToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBusinessStaffByToken = `-- name: GetBusinessStaffByToken :one
+SELECT id, business_id, user_id, role, permissions, is_active, invited_by, invitation_token, created_at, updated_at FROM business_staff WHERE invitation_token = $1
+`
+
+func (q *Queries) GetBusinessStaffByToken(ctx context.Context, invitationToken sql.NullString) (BusinessStaff, error) {
+	row := q.db.QueryRowContext(ctx, getBusinessStaffByToken, invitationToken)
+	var i BusinessStaff
+	err := row.Scan(
+		&i.ID,
+		&i.BusinessID,
+		&i.UserID,
+		&i.Role,
+		&i.Permissions,
+		&i.IsActive,
+		&i.InvitedBy,
+		&i.InvitationToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2002,7 +2148,7 @@ func (q *Queries) GetMovieDetails(ctx context.Context, id string) (Movie, error)
 }
 
 const getNearbyDrivers = `-- name: GetNearbyDrivers :many
-SELECT id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+SELECT id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, is_blacklisted, status_notes, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
 FROM drivers
 WHERE status = 'online' AND ST_DWithin(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326), $3)
 ORDER BY distance LIMIT $4
@@ -2025,6 +2171,8 @@ type GetNearbyDriversRow struct {
 	LastLocation  interface{}    `json:"last_location"`
 	UpdatedAt     sql.NullTime   `json:"updated_at"`
 	CreatedAt     sql.NullTime   `json:"created_at"`
+	IsBlacklisted sql.NullBool   `json:"is_blacklisted"`
+	StatusNotes   sql.NullString `json:"status_notes"`
 	Longitude     interface{}    `json:"longitude"`
 	Latitude      interface{}    `json:"latitude"`
 	Distance      interface{}    `json:"distance"`
@@ -2054,6 +2202,8 @@ func (q *Queries) GetNearbyDrivers(ctx context.Context, arg GetNearbyDriversPara
 			&i.LastLocation,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.IsBlacklisted,
+			&i.StatusNotes,
 			&i.Longitude,
 			&i.Latitude,
 			&i.Distance,
@@ -2072,7 +2222,7 @@ func (q *Queries) GetNearbyDrivers(ctx context.Context, arg GetNearbyDriversPara
 }
 
 const getNearbyMotorbikeDrivers = `-- name: GetNearbyMotorbikeDrivers :many
-SELECT d.id, d.user_id, d.name, d.status, d.vehicle_type_id, d.rating, d.last_location, d.updated_at, d.created_at, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+SELECT d.id, d.user_id, d.name, d.status, d.vehicle_type_id, d.rating, d.last_location, d.updated_at, d.created_at, d.is_blacklisted, d.status_notes, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
 FROM drivers d
 JOIN vehicle_types vt ON d.vehicle_type_id = vt.id
 WHERE d.status = 'online' 
@@ -2098,6 +2248,8 @@ type GetNearbyMotorbikeDriversRow struct {
 	LastLocation  interface{}    `json:"last_location"`
 	UpdatedAt     sql.NullTime   `json:"updated_at"`
 	CreatedAt     sql.NullTime   `json:"created_at"`
+	IsBlacklisted sql.NullBool   `json:"is_blacklisted"`
+	StatusNotes   sql.NullString `json:"status_notes"`
 	Longitude     interface{}    `json:"longitude"`
 	Latitude      interface{}    `json:"latitude"`
 	Distance      interface{}    `json:"distance"`
@@ -2127,6 +2279,8 @@ func (q *Queries) GetNearbyMotorbikeDrivers(ctx context.Context, arg GetNearbyMo
 			&i.LastLocation,
 			&i.UpdatedAt,
 			&i.CreatedAt,
+			&i.IsBlacklisted,
+			&i.StatusNotes,
 			&i.Longitude,
 			&i.Latitude,
 			&i.Distance,
@@ -2679,7 +2833,7 @@ func (q *Queries) GetServiceByID(ctx context.Context, id string) (Service, error
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, created_at, updated_at, is_blacklisted, status_notes FROM users WHERE email = $1
 `
 
 // Users
@@ -2697,6 +2851,8 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.ProfilePictureUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsBlacklisted,
+		&i.StatusNotes,
 	)
 	return i, err
 }
@@ -2814,6 +2970,78 @@ func (q *Queries) ListActiveJobs(ctx context.Context) ([]ListActiveJobsRow, erro
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.BusinessName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllBusinesses = `-- name: ListAllBusinesses :many
+SELECT b.id, b.owner_id, b.name, b.description, b.logo_url, b.banner_url, b.miniservice_type, b.address_id, b.phone_number, b.email, b.is_active, b.verification_status, b.rating, b.review_count, b.created_at, b.updated_at, u.email as owner_email, u.first_name as owner_first_name, u.last_name as owner_last_name
+FROM businesses b
+JOIN users u ON b.owner_id = u.id
+ORDER BY b.created_at DESC
+`
+
+type ListAllBusinessesRow struct {
+	ID                 string                         `json:"id"`
+	OwnerID            string                         `json:"owner_id"`
+	Name               string                         `json:"name"`
+	Description        sql.NullString                 `json:"description"`
+	LogoUrl            sql.NullString                 `json:"logo_url"`
+	BannerUrl          sql.NullString                 `json:"banner_url"`
+	MiniserviceType    string                         `json:"miniservice_type"`
+	AddressID          sql.NullString                 `json:"address_id"`
+	PhoneNumber        sql.NullString                 `json:"phone_number"`
+	Email              sql.NullString                 `json:"email"`
+	IsActive           sql.NullBool                   `json:"is_active"`
+	VerificationStatus NullBusinessVerificationStatus `json:"verification_status"`
+	Rating             sql.NullString                 `json:"rating"`
+	ReviewCount        sql.NullInt32                  `json:"review_count"`
+	CreatedAt          sql.NullTime                   `json:"created_at"`
+	UpdatedAt          sql.NullTime                   `json:"updated_at"`
+	OwnerEmail         string                         `json:"owner_email"`
+	OwnerFirstName     string                         `json:"owner_first_name"`
+	OwnerLastName      sql.NullString                 `json:"owner_last_name"`
+}
+
+func (q *Queries) ListAllBusinesses(ctx context.Context) ([]ListAllBusinessesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllBusinesses)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllBusinessesRow
+	for rows.Next() {
+		var i ListAllBusinessesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.BannerUrl,
+			&i.MiniserviceType,
+			&i.AddressID,
+			&i.PhoneNumber,
+			&i.Email,
+			&i.IsActive,
+			&i.VerificationStatus,
+			&i.Rating,
+			&i.ReviewCount,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OwnerEmail,
+			&i.OwnerFirstName,
+			&i.OwnerLastName,
 		); err != nil {
 			return nil, err
 		}
@@ -3078,6 +3306,141 @@ func (q *Queries) ListBusinessLocations(ctx context.Context, businessID string) 
 			&i.Longitude,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBusinessStaffByBusiness = `-- name: ListBusinessStaffByBusiness :many
+SELECT bs.id, bs.business_id, bs.user_id, bs.role, bs.permissions, bs.is_active, bs.invited_by, bs.invitation_token, bs.created_at, bs.updated_at, u.email, u.first_name, u.last_name, u.profile_picture_url
+FROM business_staff bs
+JOIN users u ON bs.user_id = u.id
+WHERE bs.business_id = $1
+`
+
+type ListBusinessStaffByBusinessRow struct {
+	ID                string                `json:"id"`
+	BusinessID        string                `json:"business_id"`
+	UserID            string                `json:"user_id"`
+	Role              string                `json:"role"`
+	Permissions       pqtype.NullRawMessage `json:"permissions"`
+	IsActive          sql.NullBool          `json:"is_active"`
+	InvitedBy         sql.NullString        `json:"invited_by"`
+	InvitationToken   sql.NullString        `json:"invitation_token"`
+	CreatedAt         sql.NullTime          `json:"created_at"`
+	UpdatedAt         sql.NullTime          `json:"updated_at"`
+	Email             string                `json:"email"`
+	FirstName         string                `json:"first_name"`
+	LastName          sql.NullString        `json:"last_name"`
+	ProfilePictureUrl sql.NullString        `json:"profile_picture_url"`
+}
+
+func (q *Queries) ListBusinessStaffByBusiness(ctx context.Context, businessID string) ([]ListBusinessStaffByBusinessRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBusinessStaffByBusiness, businessID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBusinessStaffByBusinessRow
+	for rows.Next() {
+		var i ListBusinessStaffByBusinessRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BusinessID,
+			&i.UserID,
+			&i.Role,
+			&i.Permissions,
+			&i.IsActive,
+			&i.InvitedBy,
+			&i.InvitationToken,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.ProfilePictureUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBusinessesByStatus = `-- name: ListBusinessesByStatus :many
+SELECT b.id, b.owner_id, b.name, b.description, b.logo_url, b.banner_url, b.miniservice_type, b.address_id, b.phone_number, b.email, b.is_active, b.verification_status, b.rating, b.review_count, b.created_at, b.updated_at, u.email as owner_email, u.first_name as owner_first_name, u.last_name as owner_last_name
+FROM businesses b
+JOIN users u ON b.owner_id = u.id
+WHERE b.verification_status = $1
+ORDER BY b.created_at DESC
+`
+
+type ListBusinessesByStatusRow struct {
+	ID                 string                         `json:"id"`
+	OwnerID            string                         `json:"owner_id"`
+	Name               string                         `json:"name"`
+	Description        sql.NullString                 `json:"description"`
+	LogoUrl            sql.NullString                 `json:"logo_url"`
+	BannerUrl          sql.NullString                 `json:"banner_url"`
+	MiniserviceType    string                         `json:"miniservice_type"`
+	AddressID          sql.NullString                 `json:"address_id"`
+	PhoneNumber        sql.NullString                 `json:"phone_number"`
+	Email              sql.NullString                 `json:"email"`
+	IsActive           sql.NullBool                   `json:"is_active"`
+	VerificationStatus NullBusinessVerificationStatus `json:"verification_status"`
+	Rating             sql.NullString                 `json:"rating"`
+	ReviewCount        sql.NullInt32                  `json:"review_count"`
+	CreatedAt          sql.NullTime                   `json:"created_at"`
+	UpdatedAt          sql.NullTime                   `json:"updated_at"`
+	OwnerEmail         string                         `json:"owner_email"`
+	OwnerFirstName     string                         `json:"owner_first_name"`
+	OwnerLastName      sql.NullString                 `json:"owner_last_name"`
+}
+
+func (q *Queries) ListBusinessesByStatus(ctx context.Context, verificationStatus NullBusinessVerificationStatus) ([]ListBusinessesByStatusRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBusinessesByStatus, verificationStatus)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBusinessesByStatusRow
+	for rows.Next() {
+		var i ListBusinessesByStatusRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.BannerUrl,
+			&i.MiniserviceType,
+			&i.AddressID,
+			&i.PhoneNumber,
+			&i.Email,
+			&i.IsActive,
+			&i.VerificationStatus,
+			&i.Rating,
+			&i.ReviewCount,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.OwnerEmail,
+			&i.OwnerFirstName,
+			&i.OwnerLastName,
 		); err != nil {
 			return nil, err
 		}
@@ -4685,6 +5048,45 @@ func (q *Queries) UpdateBrand(ctx context.Context, arg UpdateBrandParams) (Brand
 	return i, err
 }
 
+const updateBusinessStaff = `-- name: UpdateBusinessStaff :one
+UPDATE business_staff 
+SET role = $3, permissions = $4, is_active = $5, updated_at = CURRENT_TIMESTAMP
+WHERE business_id = $1 AND user_id = $2
+RETURNING id, business_id, user_id, role, permissions, is_active, invited_by, invitation_token, created_at, updated_at
+`
+
+type UpdateBusinessStaffParams struct {
+	BusinessID  string                `json:"business_id"`
+	UserID      string                `json:"user_id"`
+	Role        string                `json:"role"`
+	Permissions pqtype.NullRawMessage `json:"permissions"`
+	IsActive    sql.NullBool          `json:"is_active"`
+}
+
+func (q *Queries) UpdateBusinessStaff(ctx context.Context, arg UpdateBusinessStaffParams) (BusinessStaff, error) {
+	row := q.db.QueryRowContext(ctx, updateBusinessStaff,
+		arg.BusinessID,
+		arg.UserID,
+		arg.Role,
+		arg.Permissions,
+		arg.IsActive,
+	)
+	var i BusinessStaff
+	err := row.Scan(
+		&i.ID,
+		&i.BusinessID,
+		&i.UserID,
+		&i.Role,
+		&i.Permissions,
+		&i.IsActive,
+		&i.InvitedBy,
+		&i.InvitationToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateBusinessStatus = `-- name: UpdateBusinessStatus :one
 UPDATE businesses SET verification_status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, owner_id, name, description, logo_url, banner_url, miniservice_type, address_id, phone_number, email, is_active, verification_status, rating, review_count, created_at, updated_at
 `
@@ -4768,7 +5170,7 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 }
 
 const updateDriverLocation = `-- name: UpdateDriverLocation :one
-UPDATE drivers SET last_location = ST_SetSRID(ST_MakePoint($2, $3), 4326), updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at
+UPDATE drivers SET last_location = ST_SetSRID(ST_MakePoint($2, $3), 4326), updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, is_blacklisted, status_notes
 `
 
 type UpdateDriverLocationParams struct {
@@ -4791,12 +5193,14 @@ func (q *Queries) UpdateDriverLocation(ctx context.Context, arg UpdateDriverLoca
 		&i.LastLocation,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.IsBlacklisted,
+		&i.StatusNotes,
 	)
 	return i, err
 }
 
 const updateDriverStatus = `-- name: UpdateDriverStatus :one
-UPDATE drivers SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at
+UPDATE drivers SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, is_blacklisted, status_notes
 `
 
 type UpdateDriverStatusParams struct {
@@ -4817,6 +5221,8 @@ func (q *Queries) UpdateDriverStatus(ctx context.Context, arg UpdateDriverStatus
 		&i.LastLocation,
 		&i.UpdatedAt,
 		&i.CreatedAt,
+		&i.IsBlacklisted,
+		&i.StatusNotes,
 	)
 	return i, err
 }

@@ -42,6 +42,7 @@ type Registry struct {
     Pricing    *PricingHandler
     Feedback   *FeedbackHandler
     Complaints *ComplaintHandler
+    BusinessStaff *BusinessStaffHandler
 }
 
 // NewRegistry constructs all handlers used by the application.
@@ -77,6 +78,7 @@ func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, jw
         Pricing:   NewPricingHandler(queries, dbConn),
         Feedback:  NewFeedbackHandler(queries, dbConn),
         Complaints: NewComplaintHandler(queries, dbConn),
+        BusinessStaff: NewBusinessStaffHandler(queries, dbConn),
     }
 }
 
@@ -157,6 +159,8 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
 
         authRequired.POST("/businesses", reg.Business.RegisterBusiness)
         authRequired.GET("/businesses/me", reg.Business.GetMyMall)
+        authRequired.POST("/businesses/staff/invite", reg.BusinessStaff.InviteStaff)
+        authRequired.GET("/businesses/:id/staff", reg.BusinessStaff.ListStaff)
 
         authRequired.POST("/products", reg.Ecommerce.CreateProduct)
         authRequired.PUT("/products/:id", reg.Ecommerce.UpdateProduct)

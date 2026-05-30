@@ -30,6 +30,7 @@ type Querier interface {
 	CreateBusTicket(ctx context.Context, arg CreateBusTicketParams) (Ticket, error)
 	// Business
 	CreateBusiness(ctx context.Context, arg CreateBusinessParams) (Business, error)
+	CreateBusinessStaff(ctx context.Context, arg CreateBusinessStaffParams) (BusinessStaff, error)
 	CreateC2CListing(ctx context.Context, arg CreateC2CListingParams) (C2cListing, error)
 	// C2C Marketplace
 	CreateC2CSeller(ctx context.Context, arg CreateC2CSellerParams) (C2cSeller, error)
@@ -63,6 +64,7 @@ type Querier interface {
 	// Wholesale Items
 	CreateWholesaleItem(ctx context.Context, arg CreateWholesaleItemParams) (WholesaleItem, error)
 	DeleteBrand(ctx context.Context, id string) error
+	DeleteBusinessStaff(ctx context.Context, arg DeleteBusinessStaffParams) error
 	DeleteCategory(ctx context.Context, id string) error
 	// Delete Product
 	DeleteProduct(ctx context.Context, id string) error
@@ -70,6 +72,9 @@ type Querier interface {
 	GetB2BDashboardStats(ctx context.Context, buyerID string) (GetB2BDashboardStatsRow, error)
 	GetBrands(ctx context.Context) ([]GetBrandsRow, error)
 	GetBusinessByID(ctx context.Context, id string) (Business, error)
+	GetBusinessDocuments(ctx context.Context, businessID string) ([]VendorDocument, error)
+	GetBusinessStaff(ctx context.Context, arg GetBusinessStaffParams) (BusinessStaff, error)
+	GetBusinessStaffByToken(ctx context.Context, invitationToken sql.NullString) (BusinessStaff, error)
 	GetBusinessesByOwnerID(ctx context.Context, ownerID string) ([]Business, error)
 	GetC2CListingByID(ctx context.Context, id string) (C2cListing, error)
 	GetC2CSellerByUserID(ctx context.Context, userID string) (C2cSeller, error)
@@ -99,6 +104,7 @@ type Querier interface {
 	GetWholesaleItemByID(ctx context.Context, id string) (GetWholesaleItemByIDRow, error)
 	// Jobs
 	ListActiveJobs(ctx context.Context) ([]ListActiveJobsRow, error)
+	ListAllBusinesses(ctx context.Context) ([]ListAllBusinessesRow, error)
 	// Food
 	ListAllFoodItems(ctx context.Context) ([]ListAllFoodItemsRow, error)
 	ListAppointmentsByPatient(ctx context.Context, patientID string) ([]ListAppointmentsByPatientRow, error)
@@ -106,6 +112,8 @@ type Querier interface {
 	// Travel
 	ListBusRoutes(ctx context.Context, arg ListBusRoutesParams) ([]ListBusRoutesRow, error)
 	ListBusinessLocations(ctx context.Context, businessID string) ([]Address, error)
+	ListBusinessStaffByBusiness(ctx context.Context, businessID string) ([]ListBusinessStaffByBusinessRow, error)
+	ListBusinessesByStatus(ctx context.Context, verificationStatus NullBusinessVerificationStatus) ([]ListBusinessesByStatusRow, error)
 	ListBusinessesByType(ctx context.Context, miniserviceType string) ([]Business, error)
 	ListC2CListings(ctx context.Context) ([]ListC2CListingsRow, error)
 	ListComingSoonMovies(ctx context.Context) ([]Movie, error)
@@ -150,6 +158,7 @@ type Querier interface {
 	SearchStoresByLocation(ctx context.Context, arg SearchStoresByLocationParams) ([]SearchStoresByLocationRow, error)
 	UpdateB2BQuoteStatus(ctx context.Context, arg UpdateB2BQuoteStatusParams) (B2bQuote, error)
 	UpdateBrand(ctx context.Context, arg UpdateBrandParams) (Brand, error)
+	UpdateBusinessStaff(ctx context.Context, arg UpdateBusinessStaffParams) (BusinessStaff, error)
 	// Business Status
 	UpdateBusinessStatus(ctx context.Context, arg UpdateBusinessStatusParams) (Business, error)
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) error

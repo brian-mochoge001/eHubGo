@@ -144,9 +144,19 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// Assign role
+	allowedRoles := []string{"user", "vendor", "driver", "host", "c2c_seller", "staff", "admin", "executive_admin"}
 	assignedRole := "user"
 	if req.Role != "" {
-		assignedRole = req.Role
+		isValid := false
+		for _, r := range allowedRoles {
+			if r == req.Role {
+				isValid = true
+				break
+			}
+		}
+		if isValid {
+			assignedRole = req.Role
+		}
 	}
 
 	_, err = h.Queries.AssignRoleToUser(c.Request.Context(), db.AssignRoleToUserParams{

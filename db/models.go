@@ -58,6 +58,51 @@ func (ns NullBusinessVerificationStatus) Value() (driver.Value, error) {
 	return string(ns.BusinessVerificationStatus), nil
 }
 
+type ComplaintReason string
+
+const (
+	ComplaintReasonBadBehavior   ComplaintReason = "bad_behavior"
+	ComplaintReasonNoShow        ComplaintReason = "no_show"
+	ComplaintReasonUnsafeDriving ComplaintReason = "unsafe_driving"
+	ComplaintReasonPaymentIssue  ComplaintReason = "payment_issue"
+	ComplaintReasonOther         ComplaintReason = "other"
+)
+
+func (e *ComplaintReason) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ComplaintReason(s)
+	case string:
+		*e = ComplaintReason(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ComplaintReason: %T", src)
+	}
+	return nil
+}
+
+type NullComplaintReason struct {
+	ComplaintReason ComplaintReason `json:"complaint_reason"`
+	Valid           bool            `json:"valid"` // Valid is true if ComplaintReason is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullComplaintReason) Scan(value interface{}) error {
+	if value == nil {
+		ns.ComplaintReason, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ComplaintReason.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullComplaintReason) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ComplaintReason), nil
+}
+
 type DocumentType string
 
 const (
@@ -161,6 +206,7 @@ const (
 	UserRoleTypeDriver         UserRoleType = "driver"
 	UserRoleTypeHost           UserRoleType = "host"
 	UserRoleTypeC2cSeller      UserRoleType = "c2c_seller"
+	UserRoleTypeStoreStaff     UserRoleType = "store_staff"
 	UserRoleTypeUser           UserRoleType = "user"
 )
 
@@ -301,6 +347,19 @@ type BusinessLocation struct {
 	AddressID  string `json:"address_id"`
 }
 
+type BusinessStaff struct {
+	ID              string                `json:"id"`
+	BusinessID      string                `json:"business_id"`
+	UserID          string                `json:"user_id"`
+	Role            string                `json:"role"`
+	Permissions     pqtype.NullRawMessage `json:"permissions"`
+	IsActive        sql.NullBool          `json:"is_active"`
+	InvitedBy       sql.NullString        `json:"invited_by"`
+	InvitationToken sql.NullString        `json:"invitation_token"`
+	CreatedAt       sql.NullTime          `json:"created_at"`
+	UpdatedAt       sql.NullTime          `json:"updated_at"`
+}
+
 type BusinessVerificationLog struct {
 	ID         string                         `json:"id"`
 	BusinessID string                         `json:"business_id"`
@@ -356,6 +415,17 @@ type Category struct {
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
 }
 
+type Complaint struct {
+	ID         string          `json:"id"`
+	ReporterID string          `json:"reporter_id"`
+	TargetID   string          `json:"target_id"`
+	TargetType string          `json:"target_type"`
+	Reason     ComplaintReason `json:"reason"`
+	Details    sql.NullString  `json:"details"`
+	Status     string          `json:"status"`
+	CreatedAt  sql.NullTime    `json:"created_at"`
+}
+
 type Doctor struct {
 	ID            string         `json:"id"`
 	UserID        string         `json:"user_id"`
@@ -376,6 +446,8 @@ type Driver struct {
 	LastLocation  interface{}    `json:"last_location"`
 	UpdatedAt     sql.NullTime   `json:"updated_at"`
 	CreatedAt     sql.NullTime   `json:"created_at"`
+	IsBlacklisted sql.NullBool   `json:"is_blacklisted"`
+	StatusNotes   sql.NullString `json:"status_notes"`
 }
 
 type Flight struct {
@@ -766,6 +838,8 @@ type User struct {
 	ProfilePictureUrl sql.NullString `json:"profile_picture_url"`
 	CreatedAt         sql.NullTime   `json:"created_at"`
 	UpdatedAt         sql.NullTime   `json:"updated_at"`
+	IsBlacklisted     sql.NullBool   `json:"is_blacklisted"`
+	StatusNotes       sql.NullString `json:"status_notes"`
 }
 
 type UserRole struct {

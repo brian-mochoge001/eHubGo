@@ -1,3 +1,7 @@
+-- eHubGo Database Schema future features
+-- stores can have branches/warehouses (business_locations) owned by a single entity (businesses)
+
+
 -- Enable PostGIS extension for geospatial data
 CREATE EXTENSION IF NOT EXISTS postgis;
 
@@ -11,8 +15,43 @@ CREATE TYPE user_role_type AS ENUM (
     'driver', 
     'host', 
     'c2c_seller',
+    'store_staff',
     'user'
 );
+
+-- ... (skipping to around line 350 where businesses are defined)
+
+-- Business Staff (The employees of a specific store)
+CREATE TABLE business_staff (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'manager', -- 'manager', 'cashier', 'delivery'
+    permissions JSONB DEFAULT '{}',
+    is_active BOOLEAN DEFAULT TRUE,
+    invited_by TEXT REFERENCES users(id),
+    invitation_token TEXT UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(business_id, user_id)
+);
+
+ALTER TABLE business_staff ENABLE ROW LEVEL SECURITY;
+ALTER TABLE business_staff FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY business_staff_manage_policy ON business_staff
+    FOR ALL USING (
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id()) OR 
+        has_role('admin')
+    );
+
+CREATE POLICY business_staff_view_policy ON business_staff
+    FOR SELECT USING (
+        user_id = get_app_user_id() OR 
+        business_id IN (SELECT id FROM businesses WHERE owner_id = get_app_user_id())
+    );
+
+-- ... (rest of the file)
 
 -- Business Verification Status
 CREATE TYPE business_verification_status AS ENUM (

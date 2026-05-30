@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"ehubgo/db"
 
@@ -96,29 +97,108 @@ func (h *BusinessHandler) GetMyMall(c *gin.Context) {
 	}
 }
 
-// ListBusinesses returns all businesses, optionally filtered by type
+// ListBusinesses returns all businesses, optionally filtered by type or status
 func (h *BusinessHandler) ListBusinesses(c *gin.Context) {
 	businessType := c.Query("type")
 	ownerID := c.Query("owner_id")
+	status := c.Query("status")
 
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
 		qtx := h.Queries.WithTx(tx)
-		var businesses []db.Business
-		var err error
-
-		if ownerID != "" {
-			businesses, err = qtx.GetBusinessesByOwnerID(c.Request.Context(), ownerID)
-		} else if businessType != "" {
-			businesses, err = qtx.ListBusinessesByType(c.Request.Context(), businessType)
-		} else {
-			// If no type or owner filter, return all businesses for now.
-			businesses, err = qtx.ListBusinessesByType(c.Request.Context(), businessType)
+		
+		if status != "" {
+			rows, err := qtx.ListBusinessesByStatus(c.Request.Context(), db.NullBusinessVerificationStatus{
+				BusinessVerificationStatus: db.BusinessVerificationStatus(status),
+				Valid:                     true,
+			})
+			if err == nil {
+				c.JSON(http.StatusOK, rows)
+				return nil
+			}
 		}
 
+		if ownerID != "" {
+			biz, err := qtx.GetBusinessesByOwnerID(c.Request.Context(), ownerID)
+			if err == nil {
+				c.JSON(http.StatusOK, biz)
+				return nil
+			}
+		}
+
+		businesses, err := qtx.ListAllBusinesses(c.Request.Context())
 		if err != nil {
 			return err
 		}
+
+		if businessType != "" {
+			var filtered []db.ListAllBusinessesRow
+			for _, b := range businesses {
+				if b.MiniserviceType == businessType {
+					filtered = append(filtered, b)
+				}
+			}
+			c.JSON(http.StatusOK, filtered)
+			return nil
+		}
+
 		c.JSON(http.StatusOK, businesses)
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
+// UpdateBusinessStatus allows admins to approve/reject/suspend a business
+func (h *BusinessHandler) UpdateBusinessStatus(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		Status db.BusinessVerificationStatus `json:"status" binding:"required"`
+		Reason string                     `json:"reason"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Permission check: only admin/staff can update status
+	rolesVal, _ := c.Get("user_roles")
+	roles := rolesVal.(string)
+	isAdmin := false
+	for _, r := range []string{"admin", "executive_admin", "staff"} {
+		if strings.Contains(roles, r) {
+			isAdmin = true
+			break
+		}
+	}
+
+	if !isAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only admins or staff can update business status"})
+		return
+	}
+
+	err := h.DB.QueryRow("SELECT id FROM businesses WHERE id = $1", id).Scan(&id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "business not found"})
+		return
+	}
+
+	err = WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		business, err := qtx.UpdateBusinessStatus(c.Request.Context(), db.UpdateBusinessStatusParams{
+			ID:                 id,
+			VerificationStatus: db.NullBusinessVerificationStatus{
+				BusinessVerificationStatus: req.Status,
+				Valid:                      true,
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		c.JSON(http.StatusOK, business)
 		return nil
 	})
 
