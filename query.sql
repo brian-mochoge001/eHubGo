@@ -24,6 +24,18 @@ RETURNING *;
 -- name: DeleteBusinessStaff :exec
 DELETE FROM business_staff WHERE business_id = $1 AND user_id = $2;
 
+-- name: CreateVerificationLog :one
+INSERT INTO business_verification_logs (id, business_id, actor_id, old_status, new_status, reason)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: UpdateDocumentStatus :one
+UPDATE vendor_documents SET status = $2, review_notes = $3, verified_at = CURRENT_TIMESTAMP WHERE id = $1
+RETURNING *;
+
+-- name: GetVendorDocumentsByBusiness :many
+SELECT * FROM vendor_documents WHERE business_id = $1;
+
 -- C2C Marketplace
 -- name: CreateC2CSeller :one
 INSERT INTO c2c_sellers (id, user_id, bio, avatar_url)

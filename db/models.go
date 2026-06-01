@@ -16,11 +16,13 @@ import (
 type BusinessVerificationStatus string
 
 const (
-	BusinessVerificationStatusPending          BusinessVerificationStatus = "pending"
-	BusinessVerificationStatusDocumentVerified BusinessVerificationStatus = "document_verified"
-	BusinessVerificationStatusApproved         BusinessVerificationStatus = "approved"
-	BusinessVerificationStatusRejected         BusinessVerificationStatus = "rejected"
-	BusinessVerificationStatusSuspended        BusinessVerificationStatus = "suspended"
+	BusinessVerificationStatusPending            BusinessVerificationStatus = "pending"
+	BusinessVerificationStatusUnderReview        BusinessVerificationStatus = "under_review"
+	BusinessVerificationStatusDocumentsRequested BusinessVerificationStatus = "documents_requested"
+	BusinessVerificationStatusDocumentVerified   BusinessVerificationStatus = "document_verified"
+	BusinessVerificationStatusApproved           BusinessVerificationStatus = "approved"
+	BusinessVerificationStatusRejected           BusinessVerificationStatus = "rejected"
+	BusinessVerificationStatusSuspended          BusinessVerificationStatus = "suspended"
 )
 
 func (e *BusinessVerificationStatus) Scan(src interface{}) error {
@@ -446,8 +448,6 @@ type Driver struct {
 	LastLocation  interface{}    `json:"last_location"`
 	UpdatedAt     sql.NullTime   `json:"updated_at"`
 	CreatedAt     sql.NullTime   `json:"created_at"`
-	IsBlacklisted sql.NullBool   `json:"is_blacklisted"`
-	StatusNotes   sql.NullString `json:"status_notes"`
 }
 
 type Flight struct {
@@ -836,10 +836,10 @@ type User struct {
 	DateOfBirth       sql.NullTime   `json:"date_of_birth"`
 	PhoneNumber       sql.NullString `json:"phone_number"`
 	ProfilePictureUrl sql.NullString `json:"profile_picture_url"`
-	CreatedAt         sql.NullTime   `json:"created_at"`
-	UpdatedAt         sql.NullTime   `json:"updated_at"`
 	IsBlacklisted     sql.NullBool   `json:"is_blacklisted"`
 	StatusNotes       sql.NullString `json:"status_notes"`
+	CreatedAt         sql.NullTime   `json:"created_at"`
+	UpdatedAt         sql.NullTime   `json:"updated_at"`
 }
 
 type UserRole struct {

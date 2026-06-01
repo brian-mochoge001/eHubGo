@@ -1,16 +1,20 @@
 package middleware
 
 import (
+	"database/sql"
 	"net/http"
 	"strings"
 
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
-	stringadapter "github.com/casbin/casbin/v2/persist/string-adapter"
+	fileadapter "github.com/casbin/casbin/v2/persist/file-adapter"
 	"github.com/gin-gonic/gin"
 )
 
-func NewCasbinEnforcer() (*casbin.Enforcer, error) {
+func NewCasbinEnforcer(dbConn *sql.DB) (*casbin.Enforcer, error) {
+	// Fallback to FileAdapter to resolve persistence issues
+	a := fileadapter.NewAdapter("rbac_policy.csv")
+
 	m, err := model.NewModelFromString(`
 [request_definition]
 r = sub, obj, act
@@ -31,20 +35,13 @@ m = g(r.sub, p.sub) && (keyMatch2(r.obj, p.obj) || r.obj == p.obj) && (p.act == 
 		return nil, err
 	}
 
-	policy := `
-# Admin access to internal admin endpoints
-p, admin, /api/v1/admin/*, *
-
-# Health endpoints are available to unauthenticated customers
-p, customer, /api/v1/health, GET
-p, admin, /api/v1/health, GET
-`
-	a := stringadapter.NewAdapter(policy)
+	// Create Enforcer with model and adapter explicitly
 	enforcer, err := casbin.NewEnforcer(m, a)
 	if err != nil {
 		return nil, err
 	}
 
+	// Load policy
 	if err := enforcer.LoadPolicy(); err != nil {
 		return nil, err
 	}

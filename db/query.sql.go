@@ -716,7 +716,7 @@ func (q *Queries) CreateDoctor(ctx context.Context, arg CreateDoctorParams) (Doc
 const createDriver = `-- name: CreateDriver :one
 INSERT INTO drivers (id, user_id, name, status, vehicle_type_id, rating)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, is_blacklisted, status_notes
+RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at
 `
 
 type CreateDriverParams struct {
@@ -748,8 +748,6 @@ func (q *Queries) CreateDriver(ctx context.Context, arg CreateDriverParams) (Dri
 		&i.LastLocation,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.IsBlacklisted,
-		&i.StatusNotes,
 	)
 	return i, err
 }
@@ -1522,7 +1520,7 @@ func (q *Queries) CreateTicket(ctx context.Context, arg CreateTicketParams) (Tic
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, created_at, updated_at, is_blacklisted, status_notes
+RETURNING id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, is_blacklisted, status_notes, created_at, updated_at
 `
 
 type CreateUserParams struct {
@@ -1557,10 +1555,47 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.DateOfBirth,
 		&i.PhoneNumber,
 		&i.ProfilePictureUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.IsBlacklisted,
 		&i.StatusNotes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createVerificationLog = `-- name: CreateVerificationLog :one
+INSERT INTO business_verification_logs (id, business_id, actor_id, old_status, new_status, reason)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, business_id, actor_id, old_status, new_status, reason, created_at
+`
+
+type CreateVerificationLogParams struct {
+	ID         string                         `json:"id"`
+	BusinessID string                         `json:"business_id"`
+	ActorID    string                         `json:"actor_id"`
+	OldStatus  NullBusinessVerificationStatus `json:"old_status"`
+	NewStatus  BusinessVerificationStatus     `json:"new_status"`
+	Reason     sql.NullString                 `json:"reason"`
+}
+
+func (q *Queries) CreateVerificationLog(ctx context.Context, arg CreateVerificationLogParams) (BusinessVerificationLog, error) {
+	row := q.db.QueryRowContext(ctx, createVerificationLog,
+		arg.ID,
+		arg.BusinessID,
+		arg.ActorID,
+		arg.OldStatus,
+		arg.NewStatus,
+		arg.Reason,
+	)
+	var i BusinessVerificationLog
+	err := row.Scan(
+		&i.ID,
+		&i.BusinessID,
+		&i.ActorID,
+		&i.OldStatus,
+		&i.NewStatus,
+		&i.Reason,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -2148,7 +2183,7 @@ func (q *Queries) GetMovieDetails(ctx context.Context, id string) (Movie, error)
 }
 
 const getNearbyDrivers = `-- name: GetNearbyDrivers :many
-SELECT id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, is_blacklisted, status_notes, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+SELECT id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
 FROM drivers
 WHERE status = 'online' AND ST_DWithin(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326), $3)
 ORDER BY distance LIMIT $4
@@ -2171,8 +2206,6 @@ type GetNearbyDriversRow struct {
 	LastLocation  interface{}    `json:"last_location"`
 	UpdatedAt     sql.NullTime   `json:"updated_at"`
 	CreatedAt     sql.NullTime   `json:"created_at"`
-	IsBlacklisted sql.NullBool   `json:"is_blacklisted"`
-	StatusNotes   sql.NullString `json:"status_notes"`
 	Longitude     interface{}    `json:"longitude"`
 	Latitude      interface{}    `json:"latitude"`
 	Distance      interface{}    `json:"distance"`
@@ -2202,8 +2235,6 @@ func (q *Queries) GetNearbyDrivers(ctx context.Context, arg GetNearbyDriversPara
 			&i.LastLocation,
 			&i.UpdatedAt,
 			&i.CreatedAt,
-			&i.IsBlacklisted,
-			&i.StatusNotes,
 			&i.Longitude,
 			&i.Latitude,
 			&i.Distance,
@@ -2222,7 +2253,7 @@ func (q *Queries) GetNearbyDrivers(ctx context.Context, arg GetNearbyDriversPara
 }
 
 const getNearbyMotorbikeDrivers = `-- name: GetNearbyMotorbikeDrivers :many
-SELECT d.id, d.user_id, d.name, d.status, d.vehicle_type_id, d.rating, d.last_location, d.updated_at, d.created_at, d.is_blacklisted, d.status_notes, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
+SELECT d.id, d.user_id, d.name, d.status, d.vehicle_type_id, d.rating, d.last_location, d.updated_at, d.created_at, ST_X(last_location) as longitude, ST_Y(last_location) as latitude, ST_Distance(last_location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as distance
 FROM drivers d
 JOIN vehicle_types vt ON d.vehicle_type_id = vt.id
 WHERE d.status = 'online' 
@@ -2248,8 +2279,6 @@ type GetNearbyMotorbikeDriversRow struct {
 	LastLocation  interface{}    `json:"last_location"`
 	UpdatedAt     sql.NullTime   `json:"updated_at"`
 	CreatedAt     sql.NullTime   `json:"created_at"`
-	IsBlacklisted sql.NullBool   `json:"is_blacklisted"`
-	StatusNotes   sql.NullString `json:"status_notes"`
 	Longitude     interface{}    `json:"longitude"`
 	Latitude      interface{}    `json:"latitude"`
 	Distance      interface{}    `json:"distance"`
@@ -2279,8 +2308,6 @@ func (q *Queries) GetNearbyMotorbikeDrivers(ctx context.Context, arg GetNearbyMo
 			&i.LastLocation,
 			&i.UpdatedAt,
 			&i.CreatedAt,
-			&i.IsBlacklisted,
-			&i.StatusNotes,
 			&i.Longitude,
 			&i.Latitude,
 			&i.Distance,
@@ -2833,7 +2860,7 @@ func (q *Queries) GetServiceByID(ctx context.Context, id string) (Service, error
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, created_at, updated_at, is_blacklisted, status_notes FROM users WHERE email = $1
+SELECT id, email, password_hash, first_name, last_name, date_of_birth, phone_number, profile_picture_url, is_blacklisted, status_notes, created_at, updated_at FROM users WHERE email = $1
 `
 
 // Users
@@ -2849,12 +2876,48 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.DateOfBirth,
 		&i.PhoneNumber,
 		&i.ProfilePictureUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 		&i.IsBlacklisted,
 		&i.StatusNotes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getVendorDocumentsByBusiness = `-- name: GetVendorDocumentsByBusiness :many
+SELECT id, business_id, type, url, status, review_notes, verified_at, created_at FROM vendor_documents WHERE business_id = $1
+`
+
+func (q *Queries) GetVendorDocumentsByBusiness(ctx context.Context, businessID string) ([]VendorDocument, error) {
+	rows, err := q.db.QueryContext(ctx, getVendorDocumentsByBusiness, businessID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []VendorDocument
+	for rows.Next() {
+		var i VendorDocument
+		if err := rows.Scan(
+			&i.ID,
+			&i.BusinessID,
+			&i.Type,
+			&i.Url,
+			&i.Status,
+			&i.ReviewNotes,
+			&i.VerifiedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getWalletBalance = `-- name: GetWalletBalance :one
@@ -5169,8 +5232,35 @@ func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) 
 	return i, err
 }
 
+const updateDocumentStatus = `-- name: UpdateDocumentStatus :one
+UPDATE vendor_documents SET status = $2, review_notes = $3, verified_at = CURRENT_TIMESTAMP WHERE id = $1
+RETURNING id, business_id, type, url, status, review_notes, verified_at, created_at
+`
+
+type UpdateDocumentStatusParams struct {
+	ID          string         `json:"id"`
+	Status      string         `json:"status"`
+	ReviewNotes sql.NullString `json:"review_notes"`
+}
+
+func (q *Queries) UpdateDocumentStatus(ctx context.Context, arg UpdateDocumentStatusParams) (VendorDocument, error) {
+	row := q.db.QueryRowContext(ctx, updateDocumentStatus, arg.ID, arg.Status, arg.ReviewNotes)
+	var i VendorDocument
+	err := row.Scan(
+		&i.ID,
+		&i.BusinessID,
+		&i.Type,
+		&i.Url,
+		&i.Status,
+		&i.ReviewNotes,
+		&i.VerifiedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updateDriverLocation = `-- name: UpdateDriverLocation :one
-UPDATE drivers SET last_location = ST_SetSRID(ST_MakePoint($2, $3), 4326), updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, is_blacklisted, status_notes
+UPDATE drivers SET last_location = ST_SetSRID(ST_MakePoint($2, $3), 4326), updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at
 `
 
 type UpdateDriverLocationParams struct {
@@ -5193,14 +5283,12 @@ func (q *Queries) UpdateDriverLocation(ctx context.Context, arg UpdateDriverLoca
 		&i.LastLocation,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.IsBlacklisted,
-		&i.StatusNotes,
 	)
 	return i, err
 }
 
 const updateDriverStatus = `-- name: UpdateDriverStatus :one
-UPDATE drivers SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at, is_blacklisted, status_notes
+UPDATE drivers SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 RETURNING id, user_id, name, status, vehicle_type_id, rating, last_location, updated_at, created_at
 `
 
 type UpdateDriverStatusParams struct {
@@ -5221,8 +5309,6 @@ func (q *Queries) UpdateDriverStatus(ctx context.Context, arg UpdateDriverStatus
 		&i.LastLocation,
 		&i.UpdatedAt,
 		&i.CreatedAt,
-		&i.IsBlacklisted,
-		&i.StatusNotes,
 	)
 	return i, err
 }

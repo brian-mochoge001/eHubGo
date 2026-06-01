@@ -36,6 +36,7 @@ func main() {
 	fmt.Println("Dropping existing schema for a clean RLS implementation...")
 	// Drop all tables and types to avoid conflicts with enum changes
 	dropCmd := `
+		DROP TABLE IF EXISTS casbin_rule;
 		DROP SCHEMA public CASCADE;
 		CREATE SCHEMA public;
 		GRANT ALL ON SCHEMA public TO public;

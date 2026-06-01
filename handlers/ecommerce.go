@@ -19,13 +19,15 @@ type EcommerceHandler struct {
 	Queries *db.Queries
 	DB      *sql.DB
 	Cache   cache.Store
+	OC      *OrderCoordinator
 }
 
-func NewEcommerceHandler(queries *db.Queries, dbConn *sql.DB, c cache.Store) *EcommerceHandler {
+func NewEcommerceHandler(queries *db.Queries, dbConn *sql.DB, c cache.Store, oc *OrderCoordinator) *EcommerceHandler {
 	return &EcommerceHandler{
 		Queries: queries,
 		DB:      dbConn,
 		Cache:   c,
+		OC:      oc,
 	}
 }
 
@@ -450,6 +452,45 @@ func (h *EcommerceHandler) UpdateProduct(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
+}
+
+// Checkout creates an order from the user's cart using OrderCoordinator
+func (h *EcommerceHandler) Checkout(c *gin.Context) {
+	userID := c.MustGet("user_id").(string)
+	var req struct {
+		ShippingAddressID string `json:"shipping_address_id" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 1. Get cart items
+	var cartItems []db.GetCartItemsByUserIDRow
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		items, err := qtx.GetCartItemsByUserID(c.Request.Context(), userID)
+		if err != nil {
+			return err
+		}
+		cartItems = items
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 2. Orchestrate Checkout
+	parentOrderID, err := h.OC.OrchestrateCheckout(c.Request.Context(), userID, req.ShippingAddressID, cartItems)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"parent_order_id": parentOrderID, "message": "Checkout successful"})
 }
 
 // GetMiniserviceAnalytics returns platform-wide analytics for a specific miniservice type
@@ -1058,6 +1099,30 @@ func (h *EcommerceHandler) UpdateProductModel(c *gin.Context) {
 	}
 }
 
+func (h *EcommerceHandler) DeleteProduct(c *gin.Context) {
+	id := c.Param("id")
+
+	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
+		qtx := h.Queries.WithTx(tx)
+		err := qtx.DeleteProduct(c.Request.Context(), id)
+		if err != nil {
+			return err
+		}
+
+		// Invalidate cache
+		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:product:" + id)
+		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:featured:*")
+		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:products:*")
+
+		c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
+		return nil
+	})
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
+}
+
 func (h *EcommerceHandler) DeleteProductModel(c *gin.Context) {
 	id := c.Param("id")
 	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
@@ -1069,66 +1134,6 @@ func (h *EcommerceHandler) DeleteProductModel(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "product model deleted"})
-}
-
-// --- Existing methods ---
-
-// GetCart returns cart items for the current user
-func (h *EcommerceHandler) GetCart(c *gin.Context) {
-	userID := c.MustGet("user_id").(string)
-
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		items, err := qtx.GetCartItemsByUserID(c.Request.Context(), userID)
-		if err != nil {
-			return err
-		}
-		c.JSON(http.StatusOK, items)
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
-}
-
-// AddToCart adds an item to the user's cart
-func (h *EcommerceHandler) AddToCart(c *gin.Context) {
-	userID := c.MustGet("user_id").(string)
-	var req struct {
-		BusinessID string `json:"business_id" binding:"required"`
-		ItemID     string `json:"item_id" binding:"required"`
-		ItemType   string `json:"item_type" binding:"required"`
-		Quantity   int32  `json:"quantity" binding:"required,gt=0"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		params := db.AddItemToCartParams{
-			ID:         uuid.New().String(),
-			UserID:     userID,
-			BusinessID: req.BusinessID,
-			ItemID:     req.ItemID,
-			ItemType:   req.ItemType,
-			Quantity:   req.Quantity,
-		}
-
-		item, err := qtx.AddItemToCart(c.Request.Context(), params)
-		if err != nil {
-			return err
-		}
-		c.JSON(http.StatusCreated, item)
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
 }
 
 // UpdateCartItemQuantity updates the quantity of a cart item
@@ -1161,186 +1166,6 @@ func (h *EcommerceHandler) UpdateCartItemQuantity(c *gin.Context) {
 	}
 }
 
-// RemoveCartItem removes an item from the cart
-func (h *EcommerceHandler) RemoveCartItem(c *gin.Context) {
-	id := c.Param("id")
-
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		err := qtx.RemoveCartItem(c.Request.Context(), id)
-		if err != nil {
-			return err
-		}
-		c.JSON(http.StatusNoContent, nil)
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
-}
-
-// Checkout creates an order from the user's cart
-func (h *EcommerceHandler) Checkout(c *gin.Context) {
-	userID := c.MustGet("user_id").(string)
-	var req struct {
-		ShippingAddressID string `json:"shipping_address_id" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	var notifyDriverUserID string
-	var notifyDriverUserIDs []string
-	var notifyPayload interface{}
-
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-
-		// 1. Get cart items
-		cartItems, err := qtx.GetCartItemsByUserID(c.Request.Context(), userID)
-		if err != nil {
-			return err
-		}
-
-		if len(cartItems) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "cart is empty"})
-			return nil
-		}
-
-		// 2. ACID-Compliant Stock Reservation
-		for _, item := range cartItems {
-			err = qtx.LockAndDecrementStock(c.Request.Context(), db.LockAndDecrementStockParams{
-				StockQuantity: item.Quantity,
-				ID:            item.ItemID,
-			})
-			if err != nil {
-				return fmt.Errorf("insufficient stock for item: %s", item.ItemID)
-			}
-		}
-
-		// 3. Calculate Total and Create Order
-		orderID := uuid.New().String()
-		totalAmount := 0.0
-		for _, item := range cartItems {
-			price, _ := strconv.ParseFloat(item.Price, 64)
-			totalAmount += price * float64(item.Quantity)
-		}
-
-		order, err := qtx.CreateOrder(c.Request.Context(), db.CreateOrderParams{
-			ID:                orderID,
-			UserID:            userID,
-			TotalAmount:       fmt.Sprintf("%.2f", totalAmount),
-			Currency:          "Ksh",
-			Status:            "pending",
-			ShippingAddressID: sql.NullString{String: req.ShippingAddressID, Valid: true},
-		})
-		if err != nil {
-			return err
-		}
-
-		// 4. Create Order Items
-		for _, item := range cartItems {
-			_, err = qtx.CreateOrderItem(c.Request.Context(), db.CreateOrderItemParams{
-				ID:         uuid.New().String(),
-				OrderID:    orderID,
-				BusinessID: item.BusinessID,
-				ItemID:     item.ItemID,
-				ItemType:   item.ItemType,
-				Quantity:   item.Quantity,
-				UnitPrice:  item.Price,
-			})
-			if err != nil {
-				return err
-			}
-		}
-
-		// 5. Clear Cart
-		err = qtx.ClearCart(c.Request.Context(), userID)
-		if err != nil {
-			return err
-		}
-
-		// Determine if this order requires delivery (food/grocery/liquor)
-		isDelivery := false
-		var pickupLng, pickupLat float64
-		for _, item := range cartItems {
-			var miniservice sql.NullString
-			var lng, lat sql.NullFloat64
-			if err := tx.QueryRowContext(c.Request.Context(), `SELECT b.miniservice_type, a.longitude, a.latitude FROM businesses b JOIN addresses a ON a.id = b.address_id WHERE b.id = $1 LIMIT 1`, item.BusinessID).Scan(&miniservice, &lng, &lat); err == nil {
-				if miniservice.Valid && (miniservice.String == "food" || miniservice.String == "grocery" || miniservice.String == "liquor") {
-					isDelivery = true
-					if lng.Valid && lat.Valid {
-						pickupLng = lng.Float64
-						pickupLat = lat.Float64
-					}
-					break
-				}
-			}
-		}
-
-		if isDelivery {
-			// Try to auto-assign the nearest motorbike driver
-			drivers, dErr := qtx.GetNearbyMotorbikeDrivers(c.Request.Context(), db.GetNearbyMotorbikeDriversParams{
-				StMakepoint:   pickupLng,
-				StMakepoint_2: pickupLat,
-				StDwithin:     5000,
-				Limit:         10,
-			})
-			if dErr == nil && len(drivers) > 0 {
-				// assign the nearest
-				drv := drivers[0]
-				_, aErr := qtx.AssignDriverToOrder(c.Request.Context(), db.AssignDriverToOrderParams{
-					ID:          orderID,
-					DriverID:    sql.NullString{String: drv.ID, Valid: true},
-					DeliveryFee: fmt.Sprintf("%.2f", 0.00),
-				})
-				if aErr == nil {
-					// notify the assigned driver after tx
-					notifyDriverUserID = drv.UserID
-					notifyPayload = gin.H{"type": "delivery_assigned", "order": order}
-				}
-			} else {
-				// No auto-assign; mark as requested and broadcast to nearby motorbike drivers
-				if _, uErr := tx.ExecContext(c.Request.Context(), `UPDATE orders SET status='requested', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, orderID); uErr == nil {
-					// gather nearby drivers to notify
-					if dlist, dlErr := qtx.GetNearbyMotorbikeDrivers(c.Request.Context(), db.GetNearbyMotorbikeDriversParams{
-						StMakepoint:   pickupLng,
-						StMakepoint_2: pickupLat,
-						StDwithin:     5000,
-						Limit:         20,
-					}); dlErr == nil {
-						for _, d := range dlist {
-							notifyDriverUserIDs = append(notifyDriverUserIDs, d.UserID)
-						}
-						notifyPayload = gin.H{"type": "delivery_request", "order": order}
-					}
-				}
-			}
-		}
-
-		c.JSON(http.StatusCreated, order)
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// After transaction commit, notify drivers (best-effort)
-	if DriverHub != nil {
-		if notifyDriverUserID != "" {
-			DriverHub.SendToDriver(notifyDriverUserID, notifyPayload)
-		}
-		if len(notifyDriverUserIDs) > 0 {
-			DriverHub.BroadcastToDrivers(notifyDriverUserIDs, notifyPayload)
-		}
-	}
-}
-
 // GetOrders returns orders for the current user
 func (h *EcommerceHandler) GetOrders(c *gin.Context) {
 	userID := c.MustGet("user_id").(string)
@@ -1352,30 +1177,6 @@ func (h *EcommerceHandler) GetOrders(c *gin.Context) {
 			return err
 		}
 		c.JSON(http.StatusOK, orders)
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
-}
-// DeleteProduct removes a product from the database
-func (h *EcommerceHandler) DeleteProduct(c *gin.Context) {
-	id := c.Param("id")
-
-	err := WithRLS(c, h.DB, func(tx *sql.Tx) error {
-		qtx := h.Queries.WithTx(tx)
-		err := qtx.DeleteProduct(c.Request.Context(), id)
-		if err != nil {
-			return err
-		}
-
-		// Invalidate cache
-		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:product:" + id)
-		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:featured:*")
-		_ = h.Cache.Delete(c.Request.Context(), "ecommerce:products:*")
-
-		c.JSON(http.StatusOK, gin.H{"message": "product deleted"})
 		return nil
 	})
 

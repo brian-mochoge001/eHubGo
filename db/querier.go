@@ -61,6 +61,7 @@ type Querier interface {
 	CreateTaxiTrip(ctx context.Context, arg CreateTaxiTripParams) (TaxiTrip, error)
 	CreateTicket(ctx context.Context, arg CreateTicketParams) (Ticket, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateVerificationLog(ctx context.Context, arg CreateVerificationLogParams) (BusinessVerificationLog, error)
 	// Wholesale Items
 	CreateWholesaleItem(ctx context.Context, arg CreateWholesaleItemParams) (WholesaleItem, error)
 	DeleteBrand(ctx context.Context, id string) error
@@ -99,6 +100,7 @@ type Querier interface {
 	GetServiceByID(ctx context.Context, id string) (Service, error)
 	// Users
 	GetUserByEmail(ctx context.Context, email string) (User, error)
+	GetVendorDocumentsByBusiness(ctx context.Context, businessID string) ([]VendorDocument, error)
 	// Wallet & Transactions
 	GetWalletBalance(ctx context.Context, userID string) (UserWallet, error)
 	GetWholesaleItemByID(ctx context.Context, id string) (GetWholesaleItemByIDRow, error)
@@ -163,6 +165,7 @@ type Querier interface {
 	UpdateBusinessStatus(ctx context.Context, arg UpdateBusinessStatusParams) (Business, error)
 	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) error
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error)
+	UpdateDocumentStatus(ctx context.Context, arg UpdateDocumentStatusParams) (VendorDocument, error)
 	// Taxi
 	UpdateDriverLocation(ctx context.Context, arg UpdateDriverLocationParams) (Driver, error)
 	UpdateDriverStatus(ctx context.Context, arg UpdateDriverStatusParams) (Driver, error)

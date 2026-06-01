@@ -1,3 +1,15 @@
+-- Casbin RBAC Policies Table
+CREATE TABLE casbin_rule (
+    id SERIAL PRIMARY KEY,
+    ptype VARCHAR(100),
+    v0 VARCHAR(100),
+    v1 VARCHAR(100),
+    v2 VARCHAR(100),
+    v3 VARCHAR(100),
+    v4 VARCHAR(100),
+    v5 VARCHAR(100)
+);
+
 -- eHubGo Database Schema future features
 -- stores can have branches/warehouses (business_locations) owned by a single entity (businesses)
 
@@ -22,6 +34,8 @@ CREATE TYPE user_role_type AS ENUM (
 -- Business Verification Status
 CREATE TYPE business_verification_status AS ENUM (
     'pending', 
+    'under_review',
+    'documents_requested',
     'document_verified', 
     'approved', 
     'rejected', 
@@ -595,6 +609,7 @@ CREATE TABLE tasks (
 CREATE TABLE orders (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    parent_order_id TEXT REFERENCES orders(id) ON DELETE CASCADE,
     driver_id TEXT REFERENCES drivers(id) ON DELETE SET NULL,
     total_amount NUMERIC(10, 2) NOT NULL,
     delivery_fee NUMERIC(10, 2) NOT NULL DEFAULT 0.00,

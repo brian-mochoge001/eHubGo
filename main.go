@@ -96,7 +96,7 @@ func main() {
 
 	queries := db.New(conn)
 
-	rbacEnforcer, err := middleware.NewCasbinEnforcer()
+	rbacEnforcer, err := middleware.NewCasbinEnforcer(conn)
 	if err != nil {
 		sugar.Fatalw("Failed to initialize RBAC enforcer", "error", err)
 	}

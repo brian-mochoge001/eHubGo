@@ -43,15 +43,18 @@ type Registry struct {
     Feedback   *FeedbackHandler
     Complaints *ComplaintHandler
     BusinessStaff *BusinessStaffHandler
+    Compliance    *ComplianceHandler
+    OrderCoordinator *OrderCoordinator
 }
 
 // NewRegistry constructs all handlers used by the application.
 func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, jwtKey []byte, jwtExpiryMinutes int) *Registry {
+    oc := NewOrderCoordinator(queries, dbConn)
     return &Registry{
         Auth:      NewAuthHandler(queries, dbConn, jwtKey, jwtExpiryMinutes),
         Business:  NewBusinessHandler(queries, dbConn),
         User:      NewUserHandler(queries, dbConn),
-        Ecommerce: NewEcommerceHandler(queries, dbConn, redisStore),
+        Ecommerce: NewEcommerceHandler(queries, dbConn, redisStore, oc),
         Cart:      NewCartHandler(queries, dbConn),
         Review:    NewReviewHandler(queries, dbConn),
         Service:   NewServiceHandler(queries, dbConn),
@@ -79,6 +82,8 @@ func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, jw
         Feedback:  NewFeedbackHandler(queries, dbConn),
         Complaints: NewComplaintHandler(queries, dbConn),
         BusinessStaff: NewBusinessStaffHandler(queries, dbConn),
+        Compliance: NewComplianceHandler(queries, dbConn),
+        OrderCoordinator: oc,
     }
 }
 
@@ -161,27 +166,24 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
         authRequired.GET("/businesses/me", reg.Business.GetMyMall)
         authRequired.POST("/businesses/staff/invite", reg.BusinessStaff.InviteStaff)
         authRequired.GET("/businesses/:id/staff", reg.BusinessStaff.ListStaff)
+        authRequired.PUT("/businesses/:id/status", middleware.RBACMiddleware(enforcer), reg.Compliance.UpdateApplicationStatus)
+        authRequired.PUT("/businesses/documents/:doc_id/status", middleware.RBACMiddleware(enforcer), reg.Compliance.ReviewDocument)
 
         authRequired.POST("/products", reg.Ecommerce.CreateProduct)
         authRequired.PUT("/products/:id", reg.Ecommerce.UpdateProduct)
         authRequired.DELETE("/products/:id", reg.Ecommerce.DeleteProduct)
 
-        authRequired.POST("/categories", reg.Ecommerce.CreateCategory)
-        authRequired.PUT("/categories/:id", reg.Ecommerce.UpdateCategory)
-        authRequired.DELETE("/categories/:id", reg.Ecommerce.DeleteCategory)
+        authRequired.POST("/categories", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateCategory)
+        authRequired.PUT("/categories/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateCategory)
+        authRequired.DELETE("/categories/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteCategory)
 
-        authRequired.POST("/brands", reg.Ecommerce.CreateBrand)
-        authRequired.PUT("/brands/:id", reg.Ecommerce.UpdateBrand)
-        authRequired.DELETE("/brands/:id", reg.Ecommerce.DeleteBrand)
+        authRequired.POST("/brands", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateBrand)
+        authRequired.PUT("/brands/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateBrand)
+        authRequired.DELETE("/brands/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteBrand)
 
-        // Attribute Management
-        authRequired.GET("/attributes", reg.Ecommerce.ListAttributes)
-        authRequired.POST("/attributes", reg.Ecommerce.CreateAttribute)
-        authRequired.POST("/attributes/:id/values", reg.Ecommerce.AddAttributeValue)
-
-        authRequired.POST("/models", reg.Ecommerce.CreateProductModel)
-        authRequired.PUT("/models/:id", reg.Ecommerce.UpdateProductModel)
-        authRequired.DELETE("/models/:id", reg.Ecommerce.DeleteProductModel)
+        authRequired.POST("/models", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateProductModel)
+        authRequired.PUT("/models/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateProductModel)
+        authRequired.DELETE("/models/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteProductModel)
 
         authRequired.GET("/cart", reg.Cart.GetCart)
         authRequired.POST("/cart", reg.Cart.AddToCart)
@@ -217,6 +219,7 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
         authRequired.POST("/reviews", reg.Review.CreateReview)
 
         authRequired.GET("/wallet/balance", reg.Pay.GetWalletBalance)
+        authRequired.POST("/pay/mock", reg.Pay.ProcessMockPayment)
         authRequired.GET("/bills", reg.Bills.ListUserBills)
 
         authRequired.GET("/b2b/dashboard", reg.B2B.GetB2BDashboard)
