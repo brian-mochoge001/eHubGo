@@ -5,148 +5,69 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
-	"time"
 
 	"ehubgo/db"
+	firebase "firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/golang-jwt/jwt/v4"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type AuthHandler struct {
-	Queries *db.Queries
-	DB      *sql.DB
-	JWTKey  []byte
-	Expiry  time.Duration
+	Queries    *db.Queries
+	DB         *sql.DB
+	AuthClient *firebase.Client
 }
 
-func NewAuthHandler(queries *db.Queries, dbConn *sql.DB, jwtKey []byte, expiryMinutes int) *AuthHandler {
+func NewAuthHandler(queries *db.Queries, dbConn *sql.DB, authClient *firebase.Client) *AuthHandler {
 	return &AuthHandler{
-		Queries: queries,
-		DB:      dbConn,
-		JWTKey:  jwtKey,
-		Expiry:  time.Duration(expiryMinutes) * time.Minute,
+		Queries:    queries,
+		DB:         dbConn,
+		AuthClient: authClient,
 	}
 }
 
-type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
+type SyncUserRequest struct {
+	IDToken string `json:"id_token" binding:"required"`
+	Role    string `json:"role"` // Optional role selection
 }
 
-type RegisterRequest struct {
-	Email     string `json:"email" binding:"required,email"`
-	Username  string `json:"username" binding:"required,min=3"`
-	Password  string `json:"password" binding:"required,min=8"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Role      string `json:"role"` // Optional role selection
-}
-
-type AuthResponse struct {
-	Token  string   `json:"token"`
-	UserID string   `json:"user_id"`
-	Email  string   `json:"email"`
-	Roles  []string `json:"roles"`
-}
-
-type Claims struct {
-	UserID string   `json:"user_id"`
-	Email  string   `json:"email"`
-	Roles  []string `json:"roles"`
-	jwt.RegisteredClaims
-}
-
-// Login authenticates a user and returns a JWT token.
-func (h *AuthHandler) Login(c *gin.Context) {
-	var req LoginRequest
+// SyncUser verifies the Firebase ID token and synchronizes the user record in the local database.
+func (h *AuthHandler) SyncUser(c *gin.Context) {
+	var req SyncUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email or password format"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	// Fetch user by email
-	user, err := h.Queries.GetUserByEmail(c.Request.Context(), req.Email)
+	// 1. Verify Firebase ID token
+	fbToken, err := h.AuthClient.VerifyIDToken(c.Request.Context(), req.IDToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid Firebase token"})
+		return
+	}
+
+	// 2. Fetch or Create User in local database
+	user, err := h.Queries.GetUserByEmail(c.Request.Context(), fbToken.Claims["email"].(string))
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+			// Create user
+			user, err = h.Queries.CreateUser(c.Request.Context(), db.CreateUserParams{
+				ID:        fbToken.UID,
+				Email:     fbToken.Claims["email"].(string),
+				FirstName: "User", // Can be updated later
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-		return
 	}
 
-	// Verify password
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
-		return
-	}
-
-	// Fetch user roles
-	roles, err := h.fetchUserRoles(c.Request.Context(), user.ID)
-	if err != nil {
-		roles = []string{"user"}
-	}
-
-	// Generate JWT
-	token, err := h.generateJWT(user.ID, user.Email, roles)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
-		return
-	}
-
-	c.JSON(http.StatusOK, AuthResponse{
-		Token:  token,
-		UserID: user.ID,
-		Email:  user.Email,
-		Roles:  roles,
-	})
-}
-
-// Register creates a new user account with hashed password.
-func (h *AuthHandler) Register(c *gin.Context) {
-	var req RegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid registration data"})
-		return
-	}
-
-	// Check if email already exists
-	_, err := h.Queries.GetUserByEmail(c.Request.Context(), req.Email)
-	if err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Email already registered"})
-		return
-	}
-	if err != sql.ErrNoRows {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
-		return
-	}
-
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
-		return
-	}
-
-	// Create user in database
-	user, err := h.Queries.CreateUser(c.Request.Context(), db.CreateUserParams{
-		ID:           uuid.New().String(),
-		Email:        req.Email,
-		PasswordHash: string(hashedPassword),
-		FirstName:    req.FirstName,
-		LastName:     sql.NullString{String: req.LastName, Valid: req.LastName != ""},
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-		return
-	}
-
-	// Assign role
-	allowedRoles := []string{"user", "vendor", "driver", "host", "c2c_seller", "staff", "admin", "executive_admin"}
-	assignedRole := "user"
+	// 3. Assign Role (if provided)
 	if req.Role != "" {
+		allowedRoles := []string{"user", "vendor", "driver", "host", "c2c_seller", "staff", "admin", "executive_admin"}
 		isValid := false
 		for _, r := range allowedRoles {
 			if r == req.Role {
@@ -155,32 +76,27 @@ func (h *AuthHandler) Register(c *gin.Context) {
 			}
 		}
 		if isValid {
-			assignedRole = req.Role
+			_, err = h.Queries.AssignRoleToUser(c.Request.Context(), db.AssignRoleToUserParams{
+				UserID: user.ID,
+				Role:   db.UserRoleType(req.Role),
+			})
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to assign role"})
+				return
+			}
 		}
 	}
 
-	_, err = h.Queries.AssignRoleToUser(c.Request.Context(), db.AssignRoleToUserParams{
-		UserID: user.ID,
-		Role:   db.UserRoleType(assignedRole),
-	})
+	// 4. Fetch user roles
+	roles, err := h.fetchUserRoles(c.Request.Context(), user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to assign role"})
-		return
+		roles = []string{"user"}
 	}
 
-	// Generate JWT
-	roles := []string{assignedRole}
-	token, err := h.generateJWT(user.ID, user.Email, roles)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
-		return
-	}
-
-	c.JSON(http.StatusCreated, AuthResponse{
-		Token:  token,
-		UserID: user.ID,
-		Email:  user.Email,
-		Roles:  roles,
+	c.JSON(http.StatusOK, gin.H{
+		"user_id": user.ID,
+		"email":   user.Email,
+		"roles":   roles,
 	})
 }
 
@@ -200,20 +116,4 @@ func (h *AuthHandler) fetchUserRoles(ctx context.Context, userID string) ([]stri
 		roles[i] = strings.TrimSpace(r)
 	}
 	return roles, nil
-}
-
-// generateJWT creates a signed JWT token.
-func (h *AuthHandler) generateJWT(userID, email string, roles []string) (string, error) {
-	claims := Claims{
-		UserID: userID,
-		Email:  email,
-		Roles:  roles,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(h.Expiry)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(h.JWTKey)
 }

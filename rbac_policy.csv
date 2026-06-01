@@ -5,6 +5,8 @@ p, admin, /api/v1/businesses, GET
 p, admin, /api/v1/businesses/*/status, PUT
 p, staff, /api/v1/analytics/*, GET
 p, staff, /api/v1/businesses, GET
+p, staff, /api/v1/products, *
+p, staff, /api/v1/orders, *
 p, vendor, /api/v1/products, *
 p, vendor, /api/v1/businesses/me, GET
 p, vendor, /api/v1/businesses/staff/*, *

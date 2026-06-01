@@ -26,6 +26,7 @@ RUN apk --no-cache add ca-certificates
 # Copy the binaries from the builder
 COPY --from=builder /app/main .
 COPY --from=builder /app/seed .
+COPY --from=builder /app/rbac_policy.csv .
 
 EXPOSE 8080
 

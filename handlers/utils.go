@@ -52,3 +52,16 @@ func NullTimeToTimePtr(nt sql.NullTime) *time.Time {
 	}
 	return &nt.Time
 }
+
+// StringToNullString converts a string to sql.NullString
+func StringToNullString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+// NullStringToSQL is an alias for StringToNullString for backwards compatibility
+func NullStringToSQL(s string) sql.NullString {
+	return StringToNullString(s)
+}

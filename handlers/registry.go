@@ -9,6 +9,7 @@ import (
     "ehubgo/cache"
     "ehubgo/db"
     "ehubgo/middleware"
+    firebase "firebase.google.com/go/v4/auth"
 )
 
 type Registry struct {
@@ -48,10 +49,10 @@ type Registry struct {
 }
 
 // NewRegistry constructs all handlers used by the application.
-func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, jwtKey []byte, jwtExpiryMinutes int) *Registry {
+func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, authClient *firebase.Client) *Registry {
     oc := NewOrderCoordinator(queries, dbConn)
     return &Registry{
-        Auth:      NewAuthHandler(queries, dbConn, jwtKey, jwtExpiryMinutes),
+        Auth:      NewAuthHandler(queries, dbConn, authClient),
         Business:  NewBusinessHandler(queries, dbConn),
         User:      NewUserHandler(queries, dbConn),
         Ecommerce: NewEcommerceHandler(queries, dbConn, redisStore, oc),
@@ -90,8 +91,7 @@ func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, jw
 // RegisterRoutes registers all API routes onto the provided router group.
 func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforcer, redisStore cache.Store) {
     // Public auth routes
-    api.POST("/auth/login", reg.Auth.Login)
-    api.POST("/auth/register", reg.Auth.Register)
+    api.POST("/auth/sync", reg.Auth.SyncUser)
     
     // Public routes
     api.POST("/feedback", reg.Feedback.SubmitFeedback)

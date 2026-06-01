@@ -101,15 +101,6 @@ func main() {
 		sugar.Fatalw("Failed to initialize RBAC enforcer", "error", err)
 	}
 
-	// Validate JWT configuration
-	jwtSecret := cfg.JWTSecret
-	if jwtSecret == "" {
-		sugar.Fatal("JWT_SECRET must be set in environment")
-	}
-	if cfg.JWTExpiryMinutes <= 0 {
-		cfg.JWTExpiryMinutes = 60 // default 1 hour
-	}
-
 	var opts []option.ClientOption
 	if serviceAccountJSON := cfg.FirebaseServiceAccountJSON; serviceAccountJSON != "" {
 		opts = append(opts, option.WithCredentialsJSON([]byte(serviceAccountJSON)))
@@ -143,15 +134,15 @@ func main() {
 
 	api := r.Group("/api/v1")
 	api.Use(middleware.RateLimitMiddleware(redisStore))
-	api.Use(middleware.AuthMiddleware(authClient, conn, []byte(jwtSecret)))
+	api.Use(middleware.AuthMiddleware(authClient, conn))
 
 	// Build handlers registry and register routes
-	handlersReg := handlers.NewRegistry(queries, conn, redisStore, []byte(jwtSecret), cfg.JWTExpiryMinutes)
+	handlersReg := handlers.NewRegistry(queries, conn, redisStore, authClient)
 	handlers.RegisterRoutes(api, handlersReg, rbacEnforcer, redisStore)
 
 	// Admin API with Swagger Documentation
 	adminApi := r.Group("/admin")
-	adminApi.Use(middleware.AuthMiddleware(authClient, conn, []byte(jwtSecret)))
+	adminApi.Use(middleware.AuthMiddleware(authClient, conn))
 	adminApi.Use(middleware.RequireRole("executive_admin", "admin"))
 	{
 		// Serve Swagger docs securely
