@@ -93,6 +93,9 @@ func (h *AuthHandler) SyncUser(c *gin.Context) {
 		roles = []string{"user"}
 	}
 
+	// Set session cookie
+	c.SetCookie("session_token", req.IDToken, 3600*24*7, "/", "", true, true)
+
 	c.JSON(http.StatusOK, gin.H{
 		"user_id": user.ID,
 		"email":   user.Email,
