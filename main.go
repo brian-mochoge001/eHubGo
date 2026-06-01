@@ -120,10 +120,11 @@ func main() {
 
 	r := gin.Default()
 	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowCredentials = true
 	if cfg.GoEnv == "production" {
 		corsConfig.AllowOrigins = cfg.AllowedOrigins
 	} else {
-		corsConfig.AllowAllOrigins = true
+		corsConfig.AllowOrigins = []string{"http://localhost:5174", "http://localhost:5173"}
 	}
 	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Authorization"}
 	r.Use(cors.New(corsConfig))
