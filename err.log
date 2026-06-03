@@ -1,0 +1,4 @@
+2026/06/02 21:31:10 [Cache] Failed to connect to Redis, cache disabled: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+2026/06/02 21:31:10 [WorkerPool] Started with 5 workers
+2026-06-02T21:31:10.708+0300	INFO	eHubGo/main.go:173	server running on :8080
+2026-06-02T21:36:11.742+0300	INFO	eHubGo/main.go:46	self-ping success	{"status": "200 OK"}

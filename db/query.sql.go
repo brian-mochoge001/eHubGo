@@ -146,7 +146,7 @@ func (q *Queries) AddReview(ctx context.Context, arg AddReviewParams) (Review, e
 }
 
 const assignDriverToOrder = `-- name: AssignDriverToOrder :one
-UPDATE orders SET driver_id = $2, delivery_fee = $3, status = 'assigned', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, user_id, driver_id, total_amount, delivery_fee, currency, status, shipping_address_id, created_at, updated_at
+UPDATE orders SET driver_id = $2, delivery_fee = $3, status = 'assigned', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, user_id, parent_order_id, driver_id, total_amount, delivery_fee, currency, status, shipping_address_id, created_at, updated_at
 `
 
 type AssignDriverToOrderParams struct {
@@ -161,6 +161,7 @@ func (q *Queries) AssignDriverToOrder(ctx context.Context, arg AssignDriverToOrd
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.ParentOrderID,
 		&i.DriverID,
 		&i.TotalAmount,
 		&i.DeliveryFee,
@@ -173,8 +174,8 @@ func (q *Queries) AssignDriverToOrder(ctx context.Context, arg AssignDriverToOrd
 	return i, err
 }
 
-const assignRoleToUser = `-- name: AssignRoleToUser :one
-INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING user_id, role
+const assignRoleToUser = `-- name: AssignRoleToUser :exec
+INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING
 `
 
 type AssignRoleToUserParams struct {
@@ -183,11 +184,9 @@ type AssignRoleToUserParams struct {
 }
 
 // Role management
-func (q *Queries) AssignRoleToUser(ctx context.Context, arg AssignRoleToUserParams) (UserRole, error) {
-	row := q.db.QueryRowContext(ctx, assignRoleToUser, arg.UserID, arg.Role)
-	var i UserRole
-	err := row.Scan(&i.UserID, &i.Role)
-	return i, err
+func (q *Queries) AssignRoleToUser(ctx context.Context, arg AssignRoleToUserParams) error {
+	_, err := q.db.ExecContext(ctx, assignRoleToUser, arg.UserID, arg.Role)
+	return err
 }
 
 const clearCart = `-- name: ClearCart :exec
@@ -842,6 +841,7 @@ func (q *Queries) CreateFoodItem(ctx context.Context, arg CreateFoodItemParams) 
 }
 
 const createGroceryItem = `-- name: CreateGroceryItem :one
+
 INSERT INTO grocery_items (id, business_id, name, description, price, currency, image_url, unit, stock_quantity, category, is_available)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING id, business_id, name, description, price, currency, image_url, unit, stock_quantity, category, is_available, created_at, updated_at
@@ -861,6 +861,7 @@ type CreateGroceryItemParams struct {
 	IsAvailable   sql.NullBool   `json:"is_available"`
 }
 
+// ... other ecommerce items created previously ...
 func (q *Queries) CreateGroceryItem(ctx context.Context, arg CreateGroceryItemParams) (GroceryItem, error) {
 	row := q.db.QueryRowContext(ctx, createGroceryItem,
 		arg.ID,
@@ -964,7 +965,7 @@ func (q *Queries) CreateMovie(ctx context.Context, arg CreateMovieParams) (Movie
 const createOrder = `-- name: CreateOrder :one
 INSERT INTO orders (id, user_id, total_amount, currency, status, shipping_address_id)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, driver_id, total_amount, delivery_fee, currency, status, shipping_address_id, created_at, updated_at
+RETURNING id, user_id, parent_order_id, driver_id, total_amount, delivery_fee, currency, status, shipping_address_id, created_at, updated_at
 `
 
 type CreateOrderParams struct {
@@ -990,6 +991,7 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.ParentOrderID,
 		&i.DriverID,
 		&i.TotalAmount,
 		&i.DeliveryFee,
@@ -1096,9 +1098,10 @@ func (q *Queries) CreatePharmacyItem(ctx context.Context, arg CreatePharmacyItem
 }
 
 const createProduct = `-- name: CreateProduct :one
-INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_flash_sale, discount_percentage)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-RETURNING id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_flash_sale, discount_percentage, created_at, updated_at
+
+INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_featured, is_flash_sale, discount_percentage)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+RETURNING id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_featured, is_flash_sale, discount_percentage, created_at, updated_at
 `
 
 type CreateProductParams struct {
@@ -1115,10 +1118,12 @@ type CreateProductParams struct {
 	ImageUrls          []string       `json:"image_urls"`
 	Rating             sql.NullString `json:"rating"`
 	ReviewCount        sql.NullInt32  `json:"review_count"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
 	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
 	DiscountPercentage sql.NullString `json:"discount_percentage"`
 }
 
+// Products (Ecommerce)
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
 	row := q.db.QueryRowContext(ctx, createProduct,
 		arg.ID,
@@ -1134,6 +1139,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		pq.Array(arg.ImageUrls),
 		arg.Rating,
 		arg.ReviewCount,
+		arg.IsFeatured,
 		arg.IsFlashSale,
 		arg.DiscountPercentage,
 	)
@@ -1152,6 +1158,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		pq.Array(&i.ImageUrls),
 		&i.Rating,
 		&i.ReviewCount,
+		&i.IsFeatured,
 		&i.IsFlashSale,
 		&i.DiscountPercentage,
 		&i.CreatedAt,
@@ -1687,7 +1694,6 @@ const deleteProduct = `-- name: DeleteProduct :exec
 DELETE FROM products WHERE id = $1
 `
 
-// Delete Product
 func (q *Queries) DeleteProduct(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, deleteProduct, id)
 	return err
@@ -1737,6 +1743,7 @@ type GetBrandsRow struct {
 	CategoryName sql.NullString `json:"category_name"`
 }
 
+// Brands
 func (q *Queries) GetBrands(ctx context.Context) ([]GetBrandsRow, error) {
 	rows, err := q.db.QueryContext(ctx, getBrands)
 	if err != nil {
@@ -2031,6 +2038,7 @@ const getCategories = `-- name: GetCategories :many
 SELECT id, name, description, image_url, parent_id, created_at, updated_at FROM categories ORDER BY name ASC
 `
 
+// Categories
 func (q *Queries) GetCategories(ctx context.Context) ([]Category, error) {
 	rows, err := q.db.QueryContext(ctx, getCategories)
 	if err != nil {
@@ -2063,7 +2071,13 @@ func (q *Queries) GetCategories(ctx context.Context) ([]Category, error) {
 }
 
 const getFeaturedProducts = `-- name: GetFeaturedProducts :many
-SELECT id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_flash_sale, discount_percentage, created_at, updated_at FROM products WHERE rating >= 4.0 ORDER BY review_count DESC LIMIT $1 OFFSET $2
+SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_featured, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.is_featured = TRUE
+ORDER BY p.created_at DESC LIMIT $1 OFFSET $2
 `
 
 type GetFeaturedProductsParams struct {
@@ -2071,15 +2085,39 @@ type GetFeaturedProductsParams struct {
 	Offset int32 `json:"offset"`
 }
 
-func (q *Queries) GetFeaturedProducts(ctx context.Context, arg GetFeaturedProductsParams) ([]Product, error) {
+type GetFeaturedProductsRow struct {
+	ID                 string         `json:"id"`
+	BusinessID         string         `json:"business_id"`
+	Name               string         `json:"name"`
+	Description        sql.NullString `json:"description"`
+	Price              string         `json:"price"`
+	Currency           string         `json:"currency"`
+	StockQuantity      int32          `json:"stock_quantity"`
+	CategoryID         sql.NullString `json:"category_id"`
+	BrandID            sql.NullString `json:"brand_id"`
+	ModelID            sql.NullString `json:"model_id"`
+	ImageUrls          []string       `json:"image_urls"`
+	Rating             sql.NullString `json:"rating"`
+	ReviewCount        sql.NullInt32  `json:"review_count"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
+	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
+	DiscountPercentage sql.NullString `json:"discount_percentage"`
+	CreatedAt          sql.NullTime   `json:"created_at"`
+	UpdatedAt          sql.NullTime   `json:"updated_at"`
+	CategoryName       sql.NullString `json:"category_name"`
+	BrandName          sql.NullString `json:"brand_name"`
+	ModelName          sql.NullString `json:"model_name"`
+}
+
+func (q *Queries) GetFeaturedProducts(ctx context.Context, arg GetFeaturedProductsParams) ([]GetFeaturedProductsRow, error) {
 	rows, err := q.db.QueryContext(ctx, getFeaturedProducts, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Product
+	var items []GetFeaturedProductsRow
 	for rows.Next() {
-		var i Product
+		var i GetFeaturedProductsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.BusinessID,
@@ -2094,10 +2132,98 @@ func (q *Queries) GetFeaturedProducts(ctx context.Context, arg GetFeaturedProduc
 			pq.Array(&i.ImageUrls),
 			&i.Rating,
 			&i.ReviewCount,
+			&i.IsFeatured,
 			&i.IsFlashSale,
 			&i.DiscountPercentage,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.CategoryName,
+			&i.BrandName,
+			&i.ModelName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFlashSaleProducts = `-- name: GetFlashSaleProducts :many
+SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_featured, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.is_flash_sale = TRUE
+ORDER BY p.created_at DESC LIMIT $1 OFFSET $2
+`
+
+type GetFlashSaleProductsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type GetFlashSaleProductsRow struct {
+	ID                 string         `json:"id"`
+	BusinessID         string         `json:"business_id"`
+	Name               string         `json:"name"`
+	Description        sql.NullString `json:"description"`
+	Price              string         `json:"price"`
+	Currency           string         `json:"currency"`
+	StockQuantity      int32          `json:"stock_quantity"`
+	CategoryID         sql.NullString `json:"category_id"`
+	BrandID            sql.NullString `json:"brand_id"`
+	ModelID            sql.NullString `json:"model_id"`
+	ImageUrls          []string       `json:"image_urls"`
+	Rating             sql.NullString `json:"rating"`
+	ReviewCount        sql.NullInt32  `json:"review_count"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
+	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
+	DiscountPercentage sql.NullString `json:"discount_percentage"`
+	CreatedAt          sql.NullTime   `json:"created_at"`
+	UpdatedAt          sql.NullTime   `json:"updated_at"`
+	CategoryName       sql.NullString `json:"category_name"`
+	BrandName          sql.NullString `json:"brand_name"`
+	ModelName          sql.NullString `json:"model_name"`
+}
+
+func (q *Queries) GetFlashSaleProducts(ctx context.Context, arg GetFlashSaleProductsParams) ([]GetFlashSaleProductsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getFlashSaleProducts, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFlashSaleProductsRow
+	for rows.Next() {
+		var i GetFlashSaleProductsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BusinessID,
+			&i.Name,
+			&i.Description,
+			&i.Price,
+			&i.Currency,
+			&i.StockQuantity,
+			&i.CategoryID,
+			&i.BrandID,
+			&i.ModelID,
+			pq.Array(&i.ImageUrls),
+			&i.Rating,
+			&i.ReviewCount,
+			&i.IsFeatured,
+			&i.IsFlashSale,
+			&i.DiscountPercentage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CategoryName,
+			&i.BrandName,
+			&i.ModelName,
 		); err != nil {
 			return nil, err
 		}
@@ -2326,7 +2452,7 @@ func (q *Queries) GetNearbyMotorbikeDrivers(ctx context.Context, arg GetNearbyMo
 }
 
 const getOrdersByUserID = `-- name: GetOrdersByUserID :many
-SELECT id, user_id, driver_id, total_amount, delivery_fee, currency, status, shipping_address_id, created_at, updated_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC
+SELECT id, user_id, parent_order_id, driver_id, total_amount, delivery_fee, currency, status, shipping_address_id, created_at, updated_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) GetOrdersByUserID(ctx context.Context, userID string) ([]Order, error) {
@@ -2341,6 +2467,7 @@ func (q *Queries) GetOrdersByUserID(ctx context.Context, userID string) ([]Order
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
+			&i.ParentOrderID,
 			&i.DriverID,
 			&i.TotalAmount,
 			&i.DeliveryFee,
@@ -2364,7 +2491,7 @@ func (q *Queries) GetOrdersByUserID(ctx context.Context, userID string) ([]Order
 }
 
 const getProductByIDWithDetails = `-- name: GetProductByIDWithDetails :one
-SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
+SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_featured, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
 FROM products p
 LEFT JOIN categories c ON p.category_id = c.id
 LEFT JOIN brands b ON p.brand_id = b.id
@@ -2386,6 +2513,7 @@ type GetProductByIDWithDetailsRow struct {
 	ImageUrls          []string       `json:"image_urls"`
 	Rating             sql.NullString `json:"rating"`
 	ReviewCount        sql.NullInt32  `json:"review_count"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
 	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
 	DiscountPercentage sql.NullString `json:"discount_percentage"`
 	CreatedAt          sql.NullTime   `json:"created_at"`
@@ -2412,6 +2540,7 @@ func (q *Queries) GetProductByIDWithDetails(ctx context.Context, id string) (Get
 		pq.Array(&i.ImageUrls),
 		&i.Rating,
 		&i.ReviewCount,
+		&i.IsFeatured,
 		&i.IsFlashSale,
 		&i.DiscountPercentage,
 		&i.CreatedAt,
@@ -2424,7 +2553,7 @@ func (q *Queries) GetProductByIDWithDetails(ctx context.Context, id string) (Get
 }
 
 const getProducts = `-- name: GetProducts :many
-SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
+SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_featured, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
 FROM products p
 LEFT JOIN categories c ON p.category_id = c.id
 LEFT JOIN brands b ON p.brand_id = b.id
@@ -2451,6 +2580,7 @@ type GetProductsRow struct {
 	ImageUrls          []string       `json:"image_urls"`
 	Rating             sql.NullString `json:"rating"`
 	ReviewCount        sql.NullInt32  `json:"review_count"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
 	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
 	DiscountPercentage sql.NullString `json:"discount_percentage"`
 	CreatedAt          sql.NullTime   `json:"created_at"`
@@ -2460,7 +2590,6 @@ type GetProductsRow struct {
 	ModelName          sql.NullString `json:"model_name"`
 }
 
-// Products (Ecommerce)
 func (q *Queries) GetProducts(ctx context.Context, arg GetProductsParams) ([]GetProductsRow, error) {
 	rows, err := q.db.QueryContext(ctx, getProducts, arg.Limit, arg.Offset)
 	if err != nil {
@@ -2484,6 +2613,7 @@ func (q *Queries) GetProducts(ctx context.Context, arg GetProductsParams) ([]Get
 			pq.Array(&i.ImageUrls),
 			&i.Rating,
 			&i.ReviewCount,
+			&i.IsFeatured,
 			&i.IsFlashSale,
 			&i.DiscountPercentage,
 			&i.CreatedAt,
@@ -2506,12 +2636,12 @@ func (q *Queries) GetProducts(ctx context.Context, arg GetProductsParams) ([]Get
 }
 
 const getProductsByBusiness = `-- name: GetProductsByBusiness :many
-SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
+SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_featured, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
 FROM products p
 LEFT JOIN categories c ON p.category_id = c.id
 LEFT JOIN brands b ON p.brand_id = b.id
 LEFT JOIN product_models m ON p.model_id = m.id
-WHERE p.business_id = $1
+WHERE p.business_id = $1 AND p.is_featured = FALSE AND p.is_flash_sale = FALSE
 ORDER BY p.created_at DESC LIMIT $2 OFFSET $3
 `
 
@@ -2535,6 +2665,7 @@ type GetProductsByBusinessRow struct {
 	ImageUrls          []string       `json:"image_urls"`
 	Rating             sql.NullString `json:"rating"`
 	ReviewCount        sql.NullInt32  `json:"review_count"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
 	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
 	DiscountPercentage sql.NullString `json:"discount_percentage"`
 	CreatedAt          sql.NullTime   `json:"created_at"`
@@ -2567,6 +2698,7 @@ func (q *Queries) GetProductsByBusiness(ctx context.Context, arg GetProductsByBu
 			pq.Array(&i.ImageUrls),
 			&i.Rating,
 			&i.ReviewCount,
+			&i.IsFeatured,
 			&i.IsFlashSale,
 			&i.DiscountPercentage,
 			&i.CreatedAt,
@@ -2857,6 +2989,90 @@ func (q *Queries) GetServiceByID(ctx context.Context, id string) (Service, error
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getStandardProducts = `-- name: GetStandardProducts :many
+SELECT p.id, p.business_id, p.name, p.description, p.price, p.currency, p.stock_quantity, p.category_id, p.brand_id, p.model_id, p.image_urls, p.rating, p.review_count, p.is_featured, p.is_flash_sale, p.discount_percentage, p.created_at, p.updated_at, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.is_featured = FALSE AND p.is_flash_sale = FALSE
+ORDER BY p.created_at DESC LIMIT $1 OFFSET $2
+`
+
+type GetStandardProductsParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type GetStandardProductsRow struct {
+	ID                 string         `json:"id"`
+	BusinessID         string         `json:"business_id"`
+	Name               string         `json:"name"`
+	Description        sql.NullString `json:"description"`
+	Price              string         `json:"price"`
+	Currency           string         `json:"currency"`
+	StockQuantity      int32          `json:"stock_quantity"`
+	CategoryID         sql.NullString `json:"category_id"`
+	BrandID            sql.NullString `json:"brand_id"`
+	ModelID            sql.NullString `json:"model_id"`
+	ImageUrls          []string       `json:"image_urls"`
+	Rating             sql.NullString `json:"rating"`
+	ReviewCount        sql.NullInt32  `json:"review_count"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
+	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
+	DiscountPercentage sql.NullString `json:"discount_percentage"`
+	CreatedAt          sql.NullTime   `json:"created_at"`
+	UpdatedAt          sql.NullTime   `json:"updated_at"`
+	CategoryName       sql.NullString `json:"category_name"`
+	BrandName          sql.NullString `json:"brand_name"`
+	ModelName          sql.NullString `json:"model_name"`
+}
+
+func (q *Queries) GetStandardProducts(ctx context.Context, arg GetStandardProductsParams) ([]GetStandardProductsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getStandardProducts, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetStandardProductsRow
+	for rows.Next() {
+		var i GetStandardProductsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BusinessID,
+			&i.Name,
+			&i.Description,
+			&i.Price,
+			&i.Currency,
+			&i.StockQuantity,
+			&i.CategoryID,
+			&i.BrandID,
+			&i.ModelID,
+			pq.Array(&i.ImageUrls),
+			&i.Rating,
+			&i.ReviewCount,
+			&i.IsFeatured,
+			&i.IsFlashSale,
+			&i.DiscountPercentage,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CategoryName,
+			&i.BrandName,
+			&i.ModelName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
@@ -4263,6 +4479,7 @@ type ListProductModelsRow struct {
 	BrandName string         `json:"brand_name"`
 }
 
+// Product Models
 func (q *Queries) ListProductModels(ctx context.Context) ([]ListProductModelsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProductModels)
 	if err != nil {
@@ -5317,8 +5534,8 @@ const updateProduct = `-- name: UpdateProduct :one
 UPDATE products SET 
     name = $2, description = $3, price = $4, stock_quantity = $5, 
     category_id = $6, brand_id = $7, model_id = $8, image_urls = $9, 
-    is_flash_sale = $10, discount_percentage = $11, updated_at = CURRENT_TIMESTAMP
-WHERE id = $1 RETURNING id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_flash_sale, discount_percentage, created_at, updated_at
+    is_featured = $10, is_flash_sale = $11, discount_percentage = $12, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 RETURNING id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_featured, is_flash_sale, discount_percentage, created_at, updated_at
 `
 
 type UpdateProductParams struct {
@@ -5331,6 +5548,7 @@ type UpdateProductParams struct {
 	BrandID            sql.NullString `json:"brand_id"`
 	ModelID            sql.NullString `json:"model_id"`
 	ImageUrls          []string       `json:"image_urls"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
 	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
 	DiscountPercentage sql.NullString `json:"discount_percentage"`
 }
@@ -5346,6 +5564,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		arg.BrandID,
 		arg.ModelID,
 		pq.Array(arg.ImageUrls),
+		arg.IsFeatured,
 		arg.IsFlashSale,
 		arg.DiscountPercentage,
 	)
@@ -5364,6 +5583,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		pq.Array(&i.ImageUrls),
 		&i.Rating,
 		&i.ReviewCount,
+		&i.IsFeatured,
 		&i.IsFlashSale,
 		&i.DiscountPercentage,
 		&i.CreatedAt,

@@ -18,7 +18,7 @@ type Querier interface {
 	AddReview(ctx context.Context, arg AddReviewParams) (Review, error)
 	AssignDriverToOrder(ctx context.Context, arg AssignDriverToOrderParams) (Order, error)
 	// Role management
-	AssignRoleToUser(ctx context.Context, arg AssignRoleToUserParams) (UserRole, error)
+	AssignRoleToUser(ctx context.Context, arg AssignRoleToUserParams) error
 	ClearCart(ctx context.Context, userID string) error
 	CountSellerListings(ctx context.Context, sellerID string) (int64, error)
 	CreateAddress(ctx context.Context, arg CreateAddressParams) (Address, error)
@@ -40,6 +40,7 @@ type Querier interface {
 	CreateDriver(ctx context.Context, arg CreateDriverParams) (Driver, error)
 	CreateFlightTicket(ctx context.Context, arg CreateFlightTicketParams) (Ticket, error)
 	CreateFoodItem(ctx context.Context, arg CreateFoodItemParams) (FoodItem, error)
+	// ... other ecommerce items created previously ...
 	CreateGroceryItem(ctx context.Context, arg CreateGroceryItemParams) (GroceryItem, error)
 	// Hubs
 	CreateHub(ctx context.Context, arg CreateHubParams) (Hub, error)
@@ -48,6 +49,7 @@ type Querier interface {
 	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
 	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreatePharmacyItem(ctx context.Context, arg CreatePharmacyItemParams) (PharmacyItem, error)
+	// Products (Ecommerce)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateProductModel(ctx context.Context, arg CreateProductModelParams) (ProductModel, error)
 	CreateProperty(ctx context.Context, arg CreatePropertyParams) (Property, error)
@@ -67,10 +69,10 @@ type Querier interface {
 	DeleteBrand(ctx context.Context, id string) error
 	DeleteBusinessStaff(ctx context.Context, arg DeleteBusinessStaffParams) error
 	DeleteCategory(ctx context.Context, id string) error
-	// Delete Product
 	DeleteProduct(ctx context.Context, id string) error
 	DeleteProductModel(ctx context.Context, id string) error
 	GetB2BDashboardStats(ctx context.Context, buyerID string) (GetB2BDashboardStatsRow, error)
+	// Brands
 	GetBrands(ctx context.Context) ([]GetBrandsRow, error)
 	GetBusinessByID(ctx context.Context, id string) (Business, error)
 	GetBusinessDocuments(ctx context.Context, businessID string) ([]VendorDocument, error)
@@ -81,15 +83,16 @@ type Querier interface {
 	GetC2CSellerByUserID(ctx context.Context, userID string) (C2cSeller, error)
 	// Cart Items
 	GetCartItemsByUserID(ctx context.Context, userID string) ([]GetCartItemsByUserIDRow, error)
+	// Categories
 	GetCategories(ctx context.Context) ([]Category, error)
-	GetFeaturedProducts(ctx context.Context, arg GetFeaturedProductsParams) ([]Product, error)
+	GetFeaturedProducts(ctx context.Context, arg GetFeaturedProductsParams) ([]GetFeaturedProductsRow, error)
+	GetFlashSaleProducts(ctx context.Context, arg GetFlashSaleProductsParams) ([]GetFlashSaleProductsRow, error)
 	GetFoodItemByID(ctx context.Context, id string) (GetFoodItemByIDRow, error)
 	GetMovieDetails(ctx context.Context, id string) (Movie, error)
 	GetNearbyDrivers(ctx context.Context, arg GetNearbyDriversParams) ([]GetNearbyDriversRow, error)
 	GetNearbyMotorbikeDrivers(ctx context.Context, arg GetNearbyMotorbikeDriversParams) ([]GetNearbyMotorbikeDriversRow, error)
 	GetOrdersByUserID(ctx context.Context, userID string) ([]Order, error)
 	GetProductByIDWithDetails(ctx context.Context, id string) (GetProductByIDWithDetailsRow, error)
-	// Products (Ecommerce)
 	GetProducts(ctx context.Context, arg GetProductsParams) ([]GetProductsRow, error)
 	GetProductsByBusiness(ctx context.Context, arg GetProductsByBusinessParams) ([]GetProductsByBusinessRow, error)
 	GetPropertyByID(ctx context.Context, id string) (GetPropertyByIDRow, error)
@@ -98,6 +101,7 @@ type Querier interface {
 	GetReviewsByTarget(ctx context.Context, arg GetReviewsByTargetParams) ([]Review, error)
 	GetServiceBookingsByUserID(ctx context.Context, userID string) ([]ServiceBooking, error)
 	GetServiceByID(ctx context.Context, id string) (Service, error)
+	GetStandardProducts(ctx context.Context, arg GetStandardProductsParams) ([]GetStandardProductsRow, error)
 	// Users
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetVendorDocumentsByBusiness(ctx context.Context, businessID string) ([]VendorDocument, error)
@@ -136,6 +140,7 @@ type Querier interface {
 	// Pharmacy Items (Already exists, ensures prescription check is respected for OTC)
 	ListPharmacyItems(ctx context.Context) ([]PharmacyItem, error)
 	ListPharmacyItemsByBusiness(ctx context.Context, businessID string) ([]PharmacyItem, error)
+	// Product Models
 	ListProductModels(ctx context.Context) ([]ListProductModelsRow, error)
 	// Property
 	ListProperties(ctx context.Context, arg ListPropertiesParams) ([]ListPropertiesRow, error)

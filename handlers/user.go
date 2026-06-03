@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -111,6 +112,7 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 		return
 	}
 	uid := userID.(string)
+    fmt.Printf("[GetMe] Fetching user: %s\n", uid)
 
 	var user struct {
 		ID         string `json:"id"`
@@ -123,7 +125,7 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 	err := h.DB.QueryRowContext(c.Request.Context(),
 		"SELECT id, email, first_name, COALESCE(last_name, ''), COALESCE(profile_picture_url, '') FROM users WHERE id = $1",
 		uid).Scan(&user.ID, &user.Email, &user.FirstName, &user.LastName, &user.ProfileUrl)
-
+// ... rest of method
 	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})

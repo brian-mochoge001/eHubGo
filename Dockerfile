@@ -15,7 +15,7 @@ COPY . .
 # Build the main application
 RUN CGO_ENABLED=0 GOOS=linux go build -v -o main .
 
-# Build the seed script
+# Build the seed script separately
 RUN CGO_ENABLED=0 GOOS=linux go build -v -o seed ./cmd/seed/main.go
 
 # Final stage
@@ -25,7 +25,7 @@ RUN apk --no-cache add ca-certificates
 
 # Copy the binaries from the builder
 COPY --from=builder /app/main .
-COPY --from=builder /app/seed .
+COPY --from=builder /app/seea   zqd ./
 COPY --from=builder /app/rbac_policy.csv .
 
 EXPOSE 8080

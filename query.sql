@@ -287,22 +287,21 @@ SELECT * FROM messages WHERE sender_id = $1 OR receiver_id = $1 ORDER BY created
 SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC;
 
 -- Products (Ecommerce)
--- name: GetProducts :many
-SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
-FROM products p
-LEFT JOIN categories c ON p.category_id = c.id
-LEFT JOIN brands b ON p.brand_id = b.id
-LEFT JOIN product_models m ON p.model_id = m.id
-ORDER BY p.created_at DESC LIMIT $1 OFFSET $2;
 
--- name: GetProductsByBusiness :many
-SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
-FROM products p
-LEFT JOIN categories c ON p.category_id = c.id
-LEFT JOIN brands b ON p.brand_id = b.id
-LEFT JOIN product_models m ON p.model_id = m.id
-WHERE p.business_id = $1
-ORDER BY p.created_at DESC LIMIT $2 OFFSET $3;
+-- name: CreateProduct :one
+INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_featured, is_flash_sale, discount_percentage)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+RETURNING *;
+
+-- name: UpdateProduct :one
+UPDATE products SET 
+    name = $2, description = $3, price = $4, stock_quantity = $5, 
+    category_id = $6, brand_id = $7, model_id = $8, image_urls = $9, 
+    is_featured = $10, is_flash_sale = $11, discount_percentage = $12, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 RETURNING *;
+
+-- name: DeleteProduct :exec
+DELETE FROM products WHERE id = $1;
 
 -- name: GetProductByIDWithDetails :one
 SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
@@ -312,9 +311,51 @@ LEFT JOIN brands b ON p.brand_id = b.id
 LEFT JOIN product_models m ON p.model_id = m.id
 WHERE p.id = $1;
 
--- name: GetFeaturedProducts :many
-SELECT * FROM products WHERE rating >= 4.0 ORDER BY review_count DESC LIMIT $1 OFFSET $2;
+-- name: GetProducts :many
+SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+ORDER BY p.created_at DESC LIMIT $1 OFFSET $2;
 
+-- name: GetStandardProducts :many
+SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.is_featured = FALSE AND p.is_flash_sale = FALSE
+ORDER BY p.created_at DESC LIMIT $1 OFFSET $2;
+
+-- name: GetProductsByBusiness :many
+SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.business_id = $1 AND p.is_featured = FALSE AND p.is_flash_sale = FALSE
+ORDER BY p.created_at DESC LIMIT $2 OFFSET $3;
+
+-- name: GetFeaturedProducts :many
+SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.is_featured = TRUE
+ORDER BY p.created_at DESC LIMIT $1 OFFSET $2;
+
+-- name: GetFlashSaleProducts :many
+SELECT p.*, c.name as category_name, b.name as brand_name, m.name as model_name
+FROM products p
+LEFT JOIN categories c ON p.category_id = c.id
+LEFT JOIN brands b ON p.brand_id = b.id
+LEFT JOIN product_models m ON p.model_id = m.id
+WHERE p.is_flash_sale = TRUE
+ORDER BY p.created_at DESC LIMIT $1 OFFSET $2;
+
+-- Categories
 -- name: GetCategories :many
 SELECT * FROM categories ORDER BY name ASC;
 
@@ -330,6 +371,7 @@ WHERE id = $1 RETURNING *;
 -- name: DeleteCategory :exec
 DELETE FROM categories WHERE id = $1;
 
+-- Brands
 -- name: GetBrands :many
 SELECT b.*, c.name as category_name 
 FROM brands b
@@ -351,6 +393,7 @@ WHERE id = $1 RETURNING *;
 -- name: DeleteBrand :exec
 DELETE FROM brands WHERE id = $1;
 
+-- Product Models
 -- name: ListProductModels :many
 SELECT m.*, b.name as brand_name
 FROM product_models m
@@ -372,17 +415,7 @@ WHERE id = $1 RETURNING *;
 -- name: DeleteProductModel :exec
 DELETE FROM product_models WHERE id = $1;
 
--- name: CreateProduct :one
-INSERT INTO products (id, business_id, name, description, price, currency, stock_quantity, category_id, brand_id, model_id, image_urls, rating, review_count, is_flash_sale, discount_percentage)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-RETURNING *;
-
--- name: UpdateProduct :one
-UPDATE products SET 
-    name = $2, description = $3, price = $4, stock_quantity = $5, 
-    category_id = $6, brand_id = $7, model_id = $8, image_urls = $9, 
-    is_flash_sale = $10, discount_percentage = $11, updated_at = CURRENT_TIMESTAMP
-WHERE id = $1 RETURNING *;
+-- ... other ecommerce items created previously ...
 
 -- name: CreateGroceryItem :one
 INSERT INTO grocery_items (id, business_id, name, description, price, currency, image_url, unit, stock_quantity, category, is_available)
@@ -427,8 +460,8 @@ VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- Role management
--- name: AssignRoleToUser :one
-INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING *;
+-- name: AssignRoleToUser :exec
+INSERT INTO user_roles (user_id, role) VALUES ($1, $2) ON CONFLICT DO NOTHING;
 
 -- Users
 -- name: GetUserByEmail :one
@@ -446,10 +479,6 @@ INSERT INTO hubs (id, name, description) VALUES ($1, $2, $3) RETURNING *;
 -- Business Status
 -- name: UpdateBusinessStatus :one
 UPDATE businesses SET verification_status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *;
-
--- Delete Product
--- name: DeleteProduct :exec
-DELETE FROM products WHERE id = $1;
 
 -- B2B / RFQs
 -- name: CreateRFQ :one
@@ -640,4 +669,3 @@ RETURNING *;
 
 -- name: GetReviewsByTarget :many
 SELECT * FROM reviews WHERE target_id = $1 AND target_type = $2 ORDER BY created_at DESC;
-

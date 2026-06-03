@@ -94,13 +94,7 @@ func main() {
 	workerPool.Start()
 	defer workerPool.Stop()
 
-	queries := db.New(conn)
-
-	rbacEnforcer, err := middleware.NewCasbinEnforcer(conn)
-	if err != nil {
-		sugar.Fatalw("Failed to initialize RBAC enforcer", "error", err)
-	}
-
+	// Firebase Auth Client Init
 	var opts []option.ClientOption
 	if serviceAccountJSON := cfg.FirebaseServiceAccountJSON; serviceAccountJSON != "" {
 		opts = append(opts, option.WithCredentialsJSON([]byte(serviceAccountJSON)))
@@ -116,6 +110,14 @@ func main() {
 	authClient, err := fbApp.Auth(context.Background())
 	if err != nil {
 		sugar.Fatalw("error getting Auth client", "error", err)
+	}
+
+	queries := db.New(conn)
+	handlersReg := handlers.NewRegistry(queries, conn, redisStore, authClient)
+
+	rbacEnforcer, err := middleware.NewCasbinEnforcer(conn)
+	if err != nil {
+		sugar.Fatalw("Failed to initialize RBAC enforcer", "error", err)
 	}
 
 	r := gin.Default()
@@ -135,11 +137,16 @@ func main() {
 
 	api := r.Group("/api/v1")
 	api.Use(middleware.RateLimitMiddleware(redisStore))
-	api.Use(middleware.AuthMiddleware(authClient, conn))
+	
+	// Routes that don't need AuthMiddleware
+	api.POST("/auth/sync", handlersReg.Auth.SyncUser)
+	api.POST("/auth/logout", handlersReg.Auth.Logout)
+    handlers.RegisterPublicRoutes(api, handlersReg)
 
-	// Build handlers registry and register routes
-	handlersReg := handlers.NewRegistry(queries, conn, redisStore, authClient)
-	handlers.RegisterRoutes(api, handlersReg, rbacEnforcer, redisStore)
+	// Protected routes
+	protectedApi := api.Group("/")
+	protectedApi.Use(middleware.AuthMiddleware(authClient, conn))
+	handlers.RegisterProtectedRoutes(protectedApi, handlersReg, rbacEnforcer)
 
 	// Admin API with Swagger Documentation
 	adminApi := r.Group("/admin")

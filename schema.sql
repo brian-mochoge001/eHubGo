@@ -239,6 +239,7 @@ CREATE TABLE products (
     image_urls TEXT[],
     rating NUMERIC(2, 1) DEFAULT 0.0,
     review_count INTEGER DEFAULT 0,
+    is_featured BOOLEAN DEFAULT FALSE,
     is_flash_sale BOOLEAN DEFAULT FALSE,
     discount_percentage NUMERIC(5, 2) DEFAULT 0.0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

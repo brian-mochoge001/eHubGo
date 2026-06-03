@@ -13,20 +13,26 @@ import (
 // AuthMiddleware verifies Firebase ID tokens and enriches the request context.
 func AuthMiddleware(authClient *firebase.Client, dbConn *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-
-		if authHeader == "" {
-			if os.Getenv("DEV_AUTH_BYPASS") == "true" && os.Getenv("GO_ENV") != "production" {
-				c.Set("user_id", "test-user-id")
-				c.Set("user_email", "dev@example.com")
-				c.Set("user_roles", "executive_admin,admin,vendor,customer")
-				c.Set("user_dob", "2000-01-01")
+		tokenString := c.GetHeader("Authorization")
+		if tokenString != "" {
+			tokenString = strings.TrimSpace(strings.Replace(tokenString, "Bearer", "", 1))
+		} else {
+			// Fallback to cookie
+			var err error
+			tokenString, err = c.Cookie("session_token")
+			if err != nil {
+				// No token found
+				if os.Getenv("DEV_AUTH_BYPASS") == "true" && os.Getenv("GO_ENV") != "production" {
+					c.Set("user_id", "test-user-id")
+					c.Set("user_email", "dev@example.com")
+					c.Set("user_roles", "executive_admin,admin,vendor,customer")
+					c.Set("user_dob", "2000-01-01")
+				}
+				c.Next()
+				return
 			}
-			c.Next()
-			return
 		}
 
-		tokenString := strings.TrimSpace(strings.Replace(authHeader, "Bearer", "", 1))
 		if tokenString == "" {
 			c.Next()
 			return

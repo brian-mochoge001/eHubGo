@@ -407,6 +407,17 @@ type CartItem struct {
 	UpdatedAt  sql.NullTime `json:"updated_at"`
 }
 
+type CasbinRule struct {
+	ID    int32          `json:"id"`
+	Ptype sql.NullString `json:"ptype"`
+	V0    sql.NullString `json:"v0"`
+	V1    sql.NullString `json:"v1"`
+	V2    sql.NullString `json:"v2"`
+	V3    sql.NullString `json:"v3"`
+	V4    sql.NullString `json:"v4"`
+	V5    sql.NullString `json:"v5"`
+}
+
 type Category struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
@@ -582,6 +593,7 @@ type Notification struct {
 type Order struct {
 	ID                string         `json:"id"`
 	UserID            string         `json:"user_id"`
+	ParentOrderID     sql.NullString `json:"parent_order_id"`
 	DriverID          sql.NullString `json:"driver_id"`
 	TotalAmount       string         `json:"total_amount"`
 	DeliveryFee       string         `json:"delivery_fee"`
@@ -633,6 +645,7 @@ type Product struct {
 	ImageUrls          []string       `json:"image_urls"`
 	Rating             sql.NullString `json:"rating"`
 	ReviewCount        sql.NullInt32  `json:"review_count"`
+	IsFeatured         sql.NullBool   `json:"is_featured"`
 	IsFlashSale        sql.NullBool   `json:"is_flash_sale"`
 	DiscountPercentage sql.NullString `json:"discount_percentage"`
 	CreatedAt          sql.NullTime   `json:"created_at"`

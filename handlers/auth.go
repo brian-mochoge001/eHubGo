@@ -76,7 +76,7 @@ func (h *AuthHandler) SyncUser(c *gin.Context) {
 			}
 		}
 		if isValid {
-			_, err = h.Queries.AssignRoleToUser(c.Request.Context(), db.AssignRoleToUserParams{
+			err = h.Queries.AssignRoleToUser(c.Request.Context(), db.AssignRoleToUserParams{
 				UserID: user.ID,
 				Role:   db.UserRoleType(req.Role),
 			})
@@ -101,6 +101,12 @@ func (h *AuthHandler) SyncUser(c *gin.Context) {
 		"email":   user.Email,
 		"roles":   roles,
 	})
+}
+
+// Logout clears the session cookie.
+func (h *AuthHandler) Logout(c *gin.Context) {
+	c.SetCookie("session_token", "", -1, "/", "", true, true)
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
 // fetchUserRoles retrieves all roles for a user.

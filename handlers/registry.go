@@ -88,12 +88,8 @@ func NewRegistry(queries *db.Queries, dbConn *sql.DB, redisStore cache.Store, au
     }
 }
 
-// RegisterRoutes registers all API routes onto the provided router group.
-func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforcer, redisStore cache.Store) {
-    // Public auth routes
-    api.POST("/auth/sync", reg.Auth.SyncUser)
-    
-    // Public routes
+// RegisterPublicRoutes registers public API routes.
+func RegisterPublicRoutes(api *gin.RouterGroup, reg *Registry) {
     api.POST("/feedback", reg.Feedback.SubmitFeedback)
     api.POST("/complaints", reg.Complaints.SubmitComplaint)
 
@@ -102,6 +98,7 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
     api.GET("/featured-products", middleware.ChaosMiddleware(), reg.Ecommerce.ListFeaturedProducts)
     api.GET("/products", reg.Ecommerce.ListProducts)
     api.GET("/products/search", middleware.ChaosMiddleware(), reg.Ecommerce.SearchProducts)
+    api.GET("/products/filter", reg.Ecommerce.SearchAndFilterProducts)
     api.GET("/products/:id", reg.Ecommerce.GetProductByID)
     api.GET("/categories", reg.Ecommerce.ListCategories)
     api.GET("/brands", reg.Ecommerce.ListBrands)
@@ -150,94 +147,86 @@ func RegisterRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforc
     api.GET("/businesses", reg.Business.ListBusinesses)
     api.GET("/businesses/:id", reg.Business.GetBusinessProfile)
     api.GET("/reviews", reg.Review.GetReviewsByTarget)
+}
 
+// RegisterProtectedRoutes registers protected API routes.
+func RegisterProtectedRoutes(api *gin.RouterGroup, reg *Registry, enforcer *casbin.Enforcer) {
     // Protected routes
-    authRequired := api.Group("/")
-    authRequired.Use(middleware.RequireAuth())
-    {
-        // Analytics
-        authRequired.GET("/analytics/miniservices", reg.Ecommerce.GetMiniserviceAnalytics)
-        authRequired.GET("/analytics/stores/:id", reg.Ecommerce.GetStoreAnalytics)
+    
+    // Analytics
+    api.GET("/analytics/miniservices", reg.Ecommerce.GetMiniserviceAnalytics)
+    api.GET("/analytics/stores/:id", reg.Ecommerce.GetStoreAnalytics)
 
-        authRequired.GET("/users", reg.User.ListUsers)
-        authRequired.GET("/users/me", reg.User.GetMe)
+    api.GET("/users", reg.User.ListUsers)
+    api.GET("/users/me", reg.User.GetMe)
 
-        authRequired.POST("/businesses", reg.Business.RegisterBusiness)
-        authRequired.GET("/businesses/me", reg.Business.GetMyMall)
-        authRequired.POST("/businesses/staff/invite", reg.BusinessStaff.InviteStaff)
-        authRequired.GET("/businesses/:id/staff", reg.BusinessStaff.ListStaff)
-        authRequired.PUT("/businesses/:id/status", middleware.RBACMiddleware(enforcer), reg.Compliance.UpdateApplicationStatus)
-        authRequired.PUT("/businesses/documents/:doc_id/status", middleware.RBACMiddleware(enforcer), reg.Compliance.ReviewDocument)
+    api.POST("/businesses", reg.Business.RegisterBusiness)
+    api.GET("/businesses/me", reg.Business.GetMyMall)
+    api.POST("/businesses/staff/invite", reg.BusinessStaff.InviteStaff)
+    api.GET("/businesses/:id/staff", reg.BusinessStaff.ListStaff)
+    api.PUT("/businesses/:id/status", middleware.RBACMiddleware(enforcer), reg.Compliance.UpdateApplicationStatus)
+    api.PUT("/businesses/documents/:doc_id/status", middleware.RBACMiddleware(enforcer), reg.Compliance.ReviewDocument)
 
-        authRequired.POST("/products", reg.Ecommerce.CreateProduct)
-        authRequired.PUT("/products/:id", reg.Ecommerce.UpdateProduct)
-        authRequired.DELETE("/products/:id", reg.Ecommerce.DeleteProduct)
+    api.POST("/products", reg.Ecommerce.CreateProduct)
+    api.PUT("/products/:id", reg.Ecommerce.UpdateProduct)
+    api.DELETE("/products/:id", reg.Ecommerce.DeleteProduct)
 
-        authRequired.POST("/categories", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateCategory)
-        authRequired.PUT("/categories/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateCategory)
-        authRequired.DELETE("/categories/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteCategory)
+    api.POST("/categories", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateCategory)
+    api.PUT("/categories/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateCategory)
+    api.DELETE("/categories/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteCategory)
 
-        authRequired.POST("/brands", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateBrand)
-        authRequired.PUT("/brands/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateBrand)
-        authRequired.DELETE("/brands/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteBrand)
+    api.POST("/brands", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateBrand)
+    api.PUT("/brands/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateBrand)
+    api.DELETE("/brands/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteBrand)
 
-        authRequired.POST("/models", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateProductModel)
-        authRequired.PUT("/models/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateProductModel)
-        authRequired.DELETE("/models/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteProductModel)
+    api.POST("/models", middleware.RBACMiddleware(enforcer), reg.Ecommerce.CreateProductModel)
+    api.PUT("/models/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.UpdateProductModel)
+    api.DELETE("/models/:id", middleware.RBACMiddleware(enforcer), reg.Ecommerce.DeleteProductModel)
 
-        authRequired.GET("/cart", reg.Cart.GetCart)
-        authRequired.POST("/cart", reg.Cart.AddToCart)
-        authRequired.PUT("/cart/:id", reg.Ecommerce.UpdateCartItemQuantity)
-        authRequired.DELETE("/cart/:id", reg.Cart.RemoveCartItem)
-        authRequired.POST("/checkout", reg.Ecommerce.Checkout)
-        authRequired.GET("/orders", reg.Ecommerce.GetOrders)
+    api.GET("/cart", reg.Cart.GetCart)
+    api.POST("/cart", reg.Cart.AddToCart)
+    api.PUT("/cart/:id", reg.Ecommerce.UpdateCartItemQuantity)
+    api.DELETE("/cart/:id", reg.Cart.RemoveCartItem)
+    api.POST("/checkout", reg.Ecommerce.Checkout)
+    api.GET("/orders", reg.Ecommerce.GetOrders)
 
-        authRequired.POST("/services/book", reg.Service.BookService)
-        authRequired.GET("/services/my-bookings", reg.Service.GetMyBookings)
-        authRequired.POST("/services/bookings/:id/status", reg.Service.ProviderUpdateBookingStatus)
-        authRequired.POST("/services/listings", reg.Service.CreateServiceListing)
+    api.POST("/services/book", reg.Service.BookService)
+    api.GET("/services/my-bookings", reg.Service.GetMyBookings)
+    api.POST("/services/bookings/:id/status", reg.Service.ProviderUpdateBookingStatus)
+    api.POST("/services/listings", reg.Service.CreateServiceListing)
 
-        authRequired.POST("/taxi/location", reg.Taxi.UpdateLocation)
-        authRequired.GET("/taxi/location", reg.Taxi.GetDriverLocation)
-        authRequired.POST("/taxi/status", reg.Taxi.UpdateStatus)
-        authRequired.GET("/taxi/driver/tasks", reg.Taxi.GetDriverTasks)
-        authRequired.GET("/taxi/requests", reg.Taxi.GetRideRequests)
-        authRequired.GET("/delivery/requests", reg.Taxi.GetDeliveryRequests)
-        authRequired.POST("/delivery/driver/accept", reg.Taxi.AcceptDeliveryRequest)
-        authRequired.POST("/delivery/driver/decline", reg.Taxi.DeclineDeliveryRequest)
-        authRequired.POST("/taxi/driver/accept", reg.Taxi.AcceptRideRequest)
-        authRequired.POST("/taxi/driver/decline", reg.Taxi.DeclineRideRequest)
-        authRequired.POST("/taxi/request", reg.Taxi.RequestRide)
-        authRequired.GET("/ws/driver", reg.Taxi.DriverWS)
-        authRequired.POST("/food/delivery/assign", reg.Food.AssignDelivery)
+    api.POST("/taxi/location", reg.Taxi.UpdateLocation)
+    api.GET("/taxi/location", reg.Taxi.GetDriverLocation)
+    api.POST("/taxi/status", reg.Taxi.UpdateStatus)
+    api.GET("/taxi/driver/tasks", reg.Taxi.GetDriverTasks)
+    api.GET("/taxi/requests", reg.Taxi.GetRideRequests)
+    api.GET("/delivery/requests", reg.Taxi.GetDeliveryRequests)
+    api.POST("/delivery/driver/accept", reg.Taxi.AcceptDeliveryRequest)
+    api.POST("/delivery/driver/decline", reg.Taxi.DeclineDeliveryRequest)
+    api.POST("/taxi/driver/accept", reg.Taxi.AcceptRideRequest)
+    api.POST("/taxi/driver/decline", reg.Taxi.DeclineRideRequest)
+    api.POST("/taxi/request", reg.Taxi.RequestRide)
+    api.GET("/ws/driver", reg.Taxi.DriverWS)
+    api.POST("/food/delivery/assign", reg.Food.AssignDelivery)
 
-        authRequired.POST("/properties/book", reg.Property.BookProperty)
-        authRequired.POST("/properties/listings", reg.Property.CreatePropertyListing)
+    api.POST("/properties/book", reg.Property.BookProperty)
+    api.POST("/properties/listings", reg.Property.CreatePropertyListing)
 
-        authRequired.POST("/c2c/listings", reg.C2C.CreateC2CListing)
+    api.POST("/c2c/listings", reg.C2C.CreateC2CListing)
 
-        authRequired.POST("/reviews", reg.Review.CreateReview)
+    api.POST("/reviews", reg.Review.CreateReview)
 
-        authRequired.GET("/wallet/balance", reg.Pay.GetWalletBalance)
-        authRequired.POST("/pay/mock", reg.Pay.ProcessMockPayment)
-        authRequired.GET("/bills", reg.Bills.ListUserBills)
+    api.GET("/wallet/balance", reg.Pay.GetWalletBalance)
+    api.POST("/pay/mock", reg.Pay.ProcessMockPayment)
+    api.GET("/bills", reg.Bills.ListUserBills)
 
-        authRequired.GET("/b2b/dashboard", reg.B2B.GetB2BDashboard)
-        authRequired.GET("/b2b/items", reg.B2B.ListWholesaleItems)
-        authRequired.GET("/b2b/items/:id", reg.B2B.GetWholesaleItem)
-        authRequired.POST("/b2b/rfqs", reg.B2B.CreateRFQ)
-        authRequired.GET("/b2b/rfqs", reg.B2B.ListMyRFQs)
-        authRequired.POST("/b2b/quotes", reg.B2B.SubmitQuote)
+    api.GET("/b2b/dashboard", reg.B2B.GetB2BDashboard)
+    api.GET("/b2b/items", reg.B2B.ListWholesaleItems)
+    api.GET("/b2b/items/:id", reg.B2B.GetWholesaleItem)
+    api.POST("/b2b/rfqs", reg.B2B.CreateRFQ)
+    api.GET("/b2b/rfqs", reg.B2B.ListMyRFQs)
+    api.POST("/b2b/quotes", reg.B2B.SubmitQuote)
 
-        authRequired.GET("/messages", reg.User.ListMessages)
-        authRequired.GET("/notifications", reg.User.ListNotifications)
-    }
-
-    // Admin routes with RBAC
-    adminApi := api.Group("/admin")
-    adminApi.Use(middleware.RBACMiddleware(enforcer))
-    adminApi.Use(middleware.RequireRole("executive_admin", "admin"))
-    {
-        adminApi.GET("/status", func(c *gin.Context) { c.JSON(200, gin.H{"status": "admin access granted"}) })
-    }
+    api.GET("/messages", reg.User.ListMessages)
+    api.GET("/notifications", reg.User.ListNotifications)
 }
